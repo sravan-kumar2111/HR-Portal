@@ -1,0 +1,391 @@
+const Attendance = require("../models/Attendance");
+const mongoose = require("mongoose");
+const cron = require("node-cron");
+// ---------------------------
+// Logout Session
+// ---------------------------
+exports.logoutSession = async (req, res) => {
+  try {
+
+    console.log("BODY DATA:", req.body);
+
+    const userId = req.body?.employeeId;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "employeeId required"
+      });
+    }
+
+    const objectId = new mongoose.Types.ObjectId(userId);
+
+    const today = new Date().toISOString().split("T")[0];
+
+    const attendance = await Attendance.findOne({
+      employeeId: objectId,
+      date: today
+    });
+
+    if (!attendance) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance not found"
+      });
+    }
+
+    attendance.lastLogout = new Date();
+
+    await calculateWorkHours(attendance);
+
+    await attendance.save();
+
+    res.json({
+      success: true,
+      message: "Logout recorded",
+      totalWorkHours: attendance.totalWorkHours,
+      status: attendance.status
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+
+// ---------------------------
+// Start Break
+// ---------------------------
+exports.startBreak = async (req, res) => {
+  try {
+
+    console.log("BODY DATA:", req.body);
+
+    const userId = req.body?.employeeId;
+
+    if (!userId) {
+      return res.status(400).json({
+        success:false,
+        message:"employeeId required"
+      });
+    }
+
+    const objectId = new mongoose.Types.ObjectId(userId);
+
+    const today = new Date().toISOString().split("T")[0];
+
+    const attendance = await Attendance.findOne({
+      employeeId: objectId,
+      date: today
+    });
+
+    if (!attendance) {
+      return res.status(404).json({
+        success:false,
+        message:"Attendance not found"
+      });
+    }
+
+    const lastBreak = attendance.breaks[attendance.breaks.length - 1];
+
+    if (lastBreak && !lastBreak.end) {
+      return res.status(400).json({
+        success:false,
+        message:"Break already started"
+      });
+    }
+
+    attendance.breaks.push({
+      start: new Date()
+    });
+
+    await attendance.save();
+
+    res.json({
+      success:true,
+      message:"Break started"
+    });
+
+  } catch(err){
+    res.status(500).json({message:err.message});
+  }
+};
+
+// ---------------------------
+// End Break
+// ---------------------------
+exports.endBreak = async (req, res) => {
+  try {
+
+    console.log("BODY DATA:", req.body);
+
+    const userId = req.body?.employeeId;
+
+    if (!userId) {
+      return res.status(400).json({
+        success:false,
+        message:"employeeId required"
+      });
+    }
+
+    const objectId = new mongoose.Types.ObjectId(userId);
+
+    const today = new Date().toISOString().split("T")[0];
+
+    const attendance = await Attendance.findOne({
+      employeeId: objectId,
+      date: today
+    });
+
+    if (!attendance || attendance.breaks.length === 0) {
+      return res.status(404).json({
+        success:false,
+        message:"No break found"
+      });
+    }
+
+    const lastBreak = attendance.breaks[attendance.breaks.length - 1];
+
+    lastBreak.end = new Date();
+
+    await attendance.save();
+
+    res.json({
+      success:true,
+      message:"Break ended"
+    });
+
+  } catch(err){
+    res.status(500).json({message:err.message});
+  }
+};
+
+// ---------------------------
+// Live Working Hours
+// ---------------------------
+exports.getLiveHours = async (req, res) => {
+  try {
+
+    const userId = req.body.employeeId;
+
+    const today = new Date().toISOString().split("T")[0];
+
+    const attendance = await Attendance.findOne({
+      employeeId: userId,
+      date: today
+    });
+
+    if (!attendance) {
+      return res.json({ hours: 0 });
+    }
+
+    let total = (attendance.lastLogout || new Date()) - attendance.firstLogin;
+
+    attendance.breaks.forEach(b => {
+      if (b.start && b.end) {
+        total -= (b.end - b.start);
+      }
+    });
+
+    const hours = parseFloat((total / (1000 * 60 * 60)).toFixed(2));
+
+    res.json({ hours });
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+// ---------------------------
+// Auto Logout Cron (6:30 PM)
+// ---------------------------
+cron.schedule("30 18 * * *", async () => {
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    const holiday = await Holiday.findOne({ date: today });
+
+    if (holiday) {
+      console.log("Today is holiday, skipping auto logout");
+      return;
+    }
+
+    const records = await Attendance.find({ date: today });
+    for (const r of records) {
+      if (!r.lastLogout && r.firstLogin) {
+        r.lastLogout = new Date();
+        await calculateWorkHours(r);
+        await r.save();
+      }
+    }
+
+    console.log("Auto logout executed at 6:30 PM");
+  } catch (err) {
+    console.log("Auto logout error:", err);
+  }
+});
+
+
+exports.getAllAttendance = async (req, res) => {
+  try {
+
+    const records = await Attendance.find()
+      .populate("employeeId", "name email");
+
+    res.json({
+      success: true,
+      count: records.length,
+      data: records
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.getAttendanceById = async (req, res) => {
+  try {
+
+    const id = req.params.id;
+
+    const record = await Attendance.findById(id)
+      .populate("employeeId", "name email");
+
+    if (!record) {
+      return res.status(404).json({
+        success:false,
+        message:"Attendance not found"
+      });
+    }
+
+    res.json({
+      success:true,
+      data:record
+    });
+
+  } catch (err) {
+    res.status(500).json({message:err.message});
+  }
+};
+exports.deleteAttendance = async (req, res) => {
+  try {
+
+    const id = req.params.id;
+
+    const deleted = await Attendance.findByIdAndDelete(id);
+
+    if (!deleted) {
+      return res.status(404).json({
+        success:false,
+        message:"Attendance not found"
+      });
+    }
+
+    res.json({
+      success:true,
+      message:"Attendance deleted"
+    });
+
+  } catch (err) {
+    res.status(500).json({message:err.message});
+  }
+};
+exports.hrUpdateAttendance = async (req, res) => {
+  try {
+
+    console.log("HR UPDATE BODY:", req.body);
+
+    const { attendanceId, status, firstLogin, lastLogout } = req.body;
+
+    if (!attendanceId) {
+      return res.status(400).json({
+        success: false,
+        message: "attendanceId is required"
+      });
+    }
+
+    const attendance = await Attendance.findById(attendanceId);
+
+    if (!attendance) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance record not found"
+      });
+    }
+
+    // ---------------------------
+    // Update Status (optional)
+    // ---------------------------
+    if (status !== undefined) {
+      attendance.status = status;
+    }
+
+    // ---------------------------
+    // Update First Login (optional)
+    // ---------------------------
+    if (firstLogin !== undefined) {
+
+      const loginTime = new Date(firstLogin);
+      attendance.firstLogin = loginTime;
+
+      if (!attendance.sessions || attendance.sessions.length === 0) {
+        attendance.sessions = [{ loginTime }];
+      } else {
+        attendance.sessions[0].loginTime = loginTime;
+      }
+    }
+
+    // ---------------------------
+    // Update Last Logout (optional)
+    // ---------------------------
+    if (lastLogout !== undefined) {
+
+      const logoutTime = new Date(lastLogout);
+      attendance.lastLogout = logoutTime;
+
+      if (!attendance.sessions || attendance.sessions.length === 0) {
+        attendance.sessions = [{
+          loginTime: attendance.firstLogin || logoutTime,
+          logoutTime
+        }];
+      } else {
+        attendance.sessions[attendance.sessions.length - 1].logoutTime = logoutTime;
+      }
+    }
+
+    // ---------------------------
+    // Recalculate Work Hours
+    // ---------------------------
+    if (attendance.firstLogin && attendance.lastLogout) {
+
+      let total = (attendance.lastLogout - attendance.firstLogin) / (1000 * 60 * 60);
+
+      let totalBreak = 0;
+
+      if (attendance.breaks && attendance.breaks.length > 0) {
+        attendance.breaks.forEach(b => {
+          if (b.start && b.end) {
+            totalBreak += (b.end - b.start) / (1000 * 60 * 60);
+          }
+        });
+      }
+
+      attendance.totalWorkHours = parseFloat((total - totalBreak).toFixed(2));
+    }
+
+    await attendance.save();
+
+    res.json({
+      success: true,
+      message: "Attendance updated by HR successfully",
+      data: attendance
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};

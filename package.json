@@ -1,0 +1,27 @@
+{
+  "name": "hr-portal-backend",
+  "version": "1.0.0",
+  "description": "Production-ready HR management backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "body-parser": "^2.2.2",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^5.2.1",
+    "helmet": "^6.0.1",
+    "joi": "^17.9.2",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.3.0",
+    "morgan": "^1.10.0",
+    "node-cron": "^4.2.1",
+    "pdfkit": "^0.18.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
