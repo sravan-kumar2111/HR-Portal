@@ -150,94 +150,112 @@ exports.deleteHoliday = async (req, res) => {
 //   console.log(`Weekends for ${year} generated successfully!`);
 // }
 
-async function generateWeekends(year) {
-  const weekends = [];
+// / ---------------------------
+// Trigger Auto Weekend (POSTMAN)
+// // ---------------------------
+// exports.runAutoWeekend = async (req, res) => {
+//   try {
+//     const year = new Date().getFullYear();
+//     const weekends = [];
 
-  for (let month = 0; month < 12; month++) {
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
+//     for (let month = 0; month < 12; month++) {
+//       const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(year, month, day, 0, 0, 0); // local midnight
-      const dayOfWeek = date.getDay(); // Sunday=0, Saturday=6
+//       for (let day = 1; day <= daysInMonth; day++) {
+//         const dateObj = new Date(year, month, day);
+//         const dayOfWeek = dateObj.getDay();
 
-      if (dayOfWeek === 0 || dayOfWeek === 6) {
-        // Check for duplicates by day only
-        const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0);
-        const end = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59);
+//         if (dayOfWeek === 0 || dayOfWeek === 6) {
+//           const istDate = new Date(dateObj).toLocaleDateString("en-CA", {
+//             timeZone: "Asia/Kolkata"
+//           });
 
-        const exists = await Holiday.findOne({
-          date: { $gte: start, $lte: end },
-          holidayName: dayOfWeek === 0 ? "Sunday" : "Saturday"
-        });
+//           weekends.push({
+//             holidayName: dayOfWeek === 0 ? "Sunday" : "Saturday",
+//             date: istDate
+//           });
+//         }
+//       }
+//     }
 
-        if (!exists) {
-          weekends.push({
-            holidayName: dayOfWeek === 0 ? "Sunday" : "Saturday",
-            date
-          });
-        }
-      }
-    }
-  }
+//     const result = await Holiday.insertMany(weekends, { ordered: false });
 
-  if (weekends.length > 0) {
-    await Holiday.insertMany(weekends);
-    console.log(`${weekends.length} weekend holidays generated for ${year}`);
-  } else {
-    console.log(`Weekends for ${year} already exist`);
-  }
-}
+//     return res.json({
+//       success: true,
+//       message: `${result.length} weekends generated`,
+//       data: result
+//     });
 
-// Generate weekends for current year
-generateWeekends(new Date().getFullYear());
+//   } catch (err) {
+//     // duplicate case (already exists)
+//     return res.json({
+//       success: true,
+//       message: "All weekends already exist",
+//       data: []
+//     });
+//   }
+// };
 // ---------------------------
-// Generate Weekends for a given year (Controller)
+// Generate Weekends (Custom Year)
 // ---------------------------
-exports.generateWeekends = async (req, res) => {
+exports.runAutoWeekend = async (req, res) => {
   try {
-    const year = req.body.year || new Date().getFullYear(); // default: current year
-    const weekends = [];
 
-    for (let month = 0; month < 12; month++) {
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
+    // 👉 get year from body (default = current year)
+    const inputYear = req.body.year || new Date().getFullYear();
 
-      for (let day = 1; day <= daysInMonth; day++) {
-        const dateObj = new Date(year, month, day);
-        const dayOfWeek = dateObj.getDay(); // Sunday=0, Saturday=6
+    // 👉 generate for selected year + next year
+    const years = [inputYear, inputYear + 1];
 
-        if (dayOfWeek === 0 || dayOfWeek === 6) {
-          // Set time to midnight local
-          const localDate = new Date(year, month, day, 0, 0, 0, 0);
+    let allInserted = [];
 
-          // Check if holiday already exists
-          const exists = await Holiday.findOne({ date: localDate });
-          if (!exists) {
+    for (const year of years) {
+
+      const weekends = [];
+
+      for (let month = 0; month < 12; month++) {
+
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        for (let day = 1; day <= daysInMonth; day++) {
+
+          const dateObj = new Date(year, month, day);
+          const dayOfWeek = dateObj.getDay();
+
+          if (dayOfWeek === 0 || dayOfWeek === 6) {
+
+            const istDate = new Date(dateObj).toLocaleDateString("en-CA", {
+              timeZone: "Asia/Kolkata"
+            });
+
             weekends.push({
               holidayName: dayOfWeek === 0 ? "Sunday" : "Saturday",
-              date: localDate,
+              date: istDate
             });
           }
         }
       }
+
+      const inserted = await Holiday.insertMany(weekends, { ordered: false });
+
+      allInserted = allInserted.concat(inserted);
     }
 
-    if (weekends.length > 0) {
-      await Holiday.insertMany(weekends);
-      return res.json({
-        success: true,
-        message: `${weekends.length} weekend holidays generated for ${year}`,
-        weekends,
-      });
-    } else {
-      return res.json({
-        success: true,
-        message: `Weekends for ${year} already exist`,
-        weekends: [],
-      });
-    }
+    return res.json({
+      success: true,
+      message: allInserted.length
+        ? `${allInserted.length} weekends generated for ${inputYear} & ${inputYear + 1}`
+        : "All weekends already exist",
+      data: allInserted
+    });
 
   } catch (err) {
-    console.error("Error generating weekends:", err);
-    return res.status(500).json({ success: false, message: err.message });
+
+    return res.json({
+      success: true,
+      message: "All weekends already exist",
+      data: []
+    });
+
   }
 };

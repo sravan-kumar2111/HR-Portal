@@ -9,7 +9,8 @@ required:true
 
 date:{
 type:Date,
-required:true
+required:true,
+unique: true
 }
 
 });

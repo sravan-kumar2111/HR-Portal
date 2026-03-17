@@ -199,11 +199,33 @@ exports.getLiveHours = async (req, res) => {
 
 
 // ---------------------------
-// Auto Logout Cron (6:30 PM)
+// ---------------------------
+// Auto Logout Cron (6:30 PM IST)
 // ---------------------------
 cron.schedule("30 18 * * *", async () => {
   try {
-    const today = new Date().toISOString().split("T")[0];
+
+    // 🇮🇳 Get India Date
+    const today = new Date().toLocaleDateString("en-CA", {
+      timeZone: "Asia/Kolkata"
+    });
+
+    // ---------------------------
+    // Weekend Check
+    // ---------------------------
+    const day = new Date().toLocaleString("en-US", {
+      weekday: "long",
+      timeZone: "Asia/Kolkata"
+    });
+
+    if (day === "Saturday" || day === "Sunday") {
+      console.log("Weekend detected, skipping auto logout");
+      return;
+    }
+
+    // ---------------------------
+    // Holiday Check
+    // ---------------------------
     const holiday = await Holiday.findOne({ date: today });
 
     if (holiday) {
@@ -211,21 +233,35 @@ cron.schedule("30 18 * * *", async () => {
       return;
     }
 
+    // ---------------------------
+    // Get Today Attendance
+    // ---------------------------
     const records = await Attendance.find({ date: today });
+
     for (const r of records) {
+
       if (!r.lastLogout && r.firstLogin) {
+
         r.lastLogout = new Date();
+
         await calculateWorkHours(r);
+
         await r.save();
       }
+
     }
 
-    console.log("Auto logout executed at 6:30 PM");
-  } catch (err) {
-    console.log("Auto logout error:", err);
-  }
-});
+    console.log("Auto logout executed at 6:30 PM IST");
 
+  } catch (err) {
+
+    console.log("Auto logout error:", err);
+
+  }
+
+}, {
+  timezone: "Asia/Kolkata"
+});
 
 exports.getAllAttendance = async (req, res) => {
   try {
@@ -388,4 +424,45 @@ exports.hrUpdateAttendance = async (req, res) => {
       message: error.message
     });
   }
+};
+// ---------------------------
+// Calculate Work Hours
+// ---------------------------
+const calculateWorkHours = async (attendance) => {
+
+  if (!attendance.firstLogin || !attendance.lastLogout) return;
+
+  // Total working time
+  let totalMs = attendance.lastLogout - attendance.firstLogin;
+
+  // ---------------------------
+  // Subtract Break Time
+  // ---------------------------
+  let breakMs = 0;
+
+  if (attendance.breaks && attendance.breaks.length > 0) {
+    attendance.breaks.forEach(b => {
+      if (b.start && b.end) {
+        breakMs += (b.end - b.start);
+      }
+    });
+  }
+
+  totalMs = totalMs - breakMs;
+
+  const hours = totalMs / (1000 * 60 * 60);
+
+  attendance.totalWorkHours = parseFloat(hours.toFixed(2));
+
+  // ---------------------------
+  // Set Status
+  // ---------------------------
+  if (attendance.totalWorkHours >= 8) {
+    attendance.status = "Present";
+  } else if (attendance.totalWorkHours >= 4) {
+    attendance.status = "Half Day";
+  } else {
+    attendance.status = "Absent";
+  }
+
 };

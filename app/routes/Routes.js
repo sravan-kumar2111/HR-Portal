@@ -69,7 +69,7 @@ router.get("/getHolidays", holidayController.getAllHolidays);
 router.post("/createholidays", holidayController.addMultipleHolidays);
 router.put("/updateholidays/:id", holidayController.updateHoliday);
 router.delete("/deleteholidays/:id", holidayController.deleteHoliday);
-router.post("/generate-weekends", holidayController.generateWeekends);
+router.post("/auto-weekends", holidayController.runAutoWeekend);
 
 
 // Create a project
@@ -82,7 +82,7 @@ router.delete("/deleteProject/:id", projectController.deleteProject);
 
 
 
-
+//tasks
 router.post("/create-task", taskController.addTask);
 router.put("/update-progress", taskController.updateTaskProgress);
 router.get("/getprojectsById/:projectId", taskController.getTaskCount);//Manager view: tasks by project

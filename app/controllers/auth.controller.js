@@ -218,24 +218,141 @@ const Holiday = require("../models/Holiday");
 //   }
 // };
 
+// // ---------------------------
+// // Employee Login with Holiday/Weekend Logic
+// // ---------------------------
+// exports.login = async (req, res) => {
+//   try {
+//     const { email, password } = req.body;
+
+//     // ---------------------------
+//     // 1. Find User
+//     // ---------------------------
+//     const user = await User.findOne({ email });
+//     if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+//     const match = await bcrypt.compare(password, user.password);
+//     if (!match) return res.status(400).json({ success: false, message: "Invalid password" });
+
+//     // ---------------------------
+//     // 2. First Login: require password change
+//     // ---------------------------
+//     if (user.firstLogin) {
+//       return res.json({
+//         success: true,
+//         message: "First login - change password required",
+//         userId: user._id,
+//         changePassword: true
+//       });
+//     }
+
+//     // ---------------------------
+//     // 3. Attendance for Employees
+//     // ---------------------------
+//     if (user.role === "employee") {
+//       const now = new Date();
+//       const todayStr = now.toISOString().split("T")[0]; // YYYY-MM-DD
+
+//       // 3a. Check if today is a holiday/weekend
+//       const holiday = await Holiday.findOne({ date: todayStr });
+
+//       // 3b. Determine attendance status
+//       let status = "present"; // default if employee logs in
+//       if (!holiday) {
+//         // Not a holiday, check office start time
+//         const limit = new Date();
+//         limit.setHours(9, 40, 0, 0); // 9:40 AM limit
+//         status = now > limit ? "absent" : "present";
+//       } else {
+//         // Holiday or weekend, login overrides → present
+//         status = "present";
+//       }
+
+//       // 3c. Create or update today's attendance
+//       let attendance = await Attendance.findOne({ employeeId: user._id, date: todayStr });
+
+//       if (!attendance) {
+//         attendance = new Attendance({
+//           employeeId: user._id,
+//           date: todayStr,
+//           firstLogin: now,
+//           sessions: [{ loginTime: now }],
+//           status
+//         });
+//         await attendance.save();
+//       }
+
+//       // 3d. Calculate running hours if employee already logged in
+//       let runningHours = 0;
+//       if (attendance.firstLogin) {
+//         const endTime = attendance.lastLogout || new Date();
+//         runningHours = (endTime - attendance.firstLogin) / (1000 * 60 * 60); // hours
+
+//         // Subtract break hours
+//         attendance.breaks.forEach(b => {
+//           if (b.start && b.end) runningHours -= (b.end - b.start) / (1000 * 60 * 60);
+//         });
+
+//         runningHours = parseFloat(runningHours.toFixed(2));
+//       }
+
+//       // 3e. Return response with JWT token and attendance info
+//       return res.json({
+//         success: true,
+//         token: jwt.sign(
+//           { id: user._id, role: user.role },
+//           process.env.JWT_SECRET,
+//           { expiresIn: "1d" }
+//         ),
+//         role: user.role,
+//         attendanceStatus: attendance.status,
+//         runningHours
+//       });
+
+//     } else {
+//       // ---------------------------
+//       // Non-employee login
+//       // ---------------------------
+//       const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "1d" });
+//       return res.json({ success: true, token, role: user.role });
+//     }
+
+//   } catch (error) {
+//     return res.status(500).json({ success: false, message: error.message });
+//   }
+// };
 // ---------------------------
-// Employee Login with Holiday/Weekend Logic
+// Employee Login
 // ---------------------------
 exports.login = async (req, res) => {
+
   try {
+
     const { email, password } = req.body;
 
     // ---------------------------
-    // 1. Find User
+    // 1️⃣ Find User
     // ---------------------------
     const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
 
     const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(400).json({ success: false, message: "Invalid password" });
+
+    if (!match) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid password"
+      });
+    }
 
     // ---------------------------
-    // 2. First Login: require password change
+    // 2️⃣ First Login Check
     // ---------------------------
     if (user.firstLogin) {
       return res.json({
@@ -247,79 +364,154 @@ exports.login = async (req, res) => {
     }
 
     // ---------------------------
-    // 3. Attendance for Employees
+    // 3️⃣ Attendance for Employees
     // ---------------------------
     if (user.role === "employee") {
-      const now = new Date();
-      const todayStr = now.toISOString().split("T")[0]; // YYYY-MM-DD
 
-      // 3a. Check if today is a holiday/weekend
+      const now = new Date();
+
+      // 🇮🇳 India Date
+      const todayStr = new Date().toLocaleDateString("en-CA", {
+        timeZone: "Asia/Kolkata"
+      });
+
+      // ---------------------------
+      // Check Holiday
+      // ---------------------------
       const holiday = await Holiday.findOne({ date: todayStr });
 
-      // 3b. Determine attendance status
-      let status = "present"; // default if employee logs in
+      let status = "Present";
+
       if (!holiday) {
-        // Not a holiday, check office start time
+
+        // Office login limit (9:40 AM IST)
         const limit = new Date();
-        limit.setHours(9, 40, 0, 0); // 9:40 AM limit
-        status = now > limit ? "absent" : "present";
-      } else {
-        // Holiday or weekend, login overrides → present
-        status = "present";
+        limit.setHours(9, 40, 0, 0);
+
+        if (now > limit) {
+          status = "Absent";
+        }
+
       }
 
-      // 3c. Create or update today's attendance
-      let attendance = await Attendance.findOne({ employeeId: user._id, date: todayStr });
+      // ---------------------------
+      // Find Today's Attendance
+      // ---------------------------
+      let attendance = await Attendance.findOne({
+        employeeId: user._id,
+        date: todayStr
+      });
 
+      // ---------------------------
+      // First Login Today
+      // ---------------------------
       if (!attendance) {
+
         attendance = new Attendance({
           employeeId: user._id,
           date: todayStr,
           firstLogin: now,
-          sessions: [{ loginTime: now }],
+          sessions: [{
+            loginTime: now
+          }],
           status
         });
+
+        await attendance.save();
+
+      } else {
+
+        // Multiple login sessions
+        attendance.sessions.push({
+          loginTime: now
+        });
+
         await attendance.save();
       }
 
-      // 3d. Calculate running hours if employee already logged in
+      // ---------------------------
+      // Calculate Running Hours
+      // ---------------------------
       let runningHours = 0;
-      if (attendance.firstLogin) {
-        const endTime = attendance.lastLogout || new Date();
-        runningHours = (endTime - attendance.firstLogin) / (1000 * 60 * 60); // hours
 
-        // Subtract break hours
-        attendance.breaks.forEach(b => {
-          if (b.start && b.end) runningHours -= (b.end - b.start) / (1000 * 60 * 60);
-        });
+      if (attendance.firstLogin) {
+
+        const endTime = attendance.lastLogout || new Date();
+
+        runningHours = (endTime - attendance.firstLogin) / (1000 * 60 * 60);
+
+        // subtract breaks
+        if (attendance.breaks && attendance.breaks.length > 0) {
+
+          attendance.breaks.forEach(b => {
+            if (b.start && b.end) {
+              runningHours -= (b.end - b.start) / (1000 * 60 * 60);
+            }
+          });
+
+        }
 
         runningHours = parseFloat(runningHours.toFixed(2));
       }
 
-      // 3e. Return response with JWT token and attendance info
+      // ---------------------------
+      // Generate JWT Token
+      // ---------------------------
+      const token = jwt.sign(
+        {
+          id: user._id,
+          role: user.role
+        },
+        process.env.JWT_SECRET,
+        {
+          expiresIn: "1d"
+        }
+      );
+
+      // ---------------------------
+      // Response
+      // ---------------------------
       return res.json({
         success: true,
-        token: jwt.sign(
-          { id: user._id, role: user.role },
-          process.env.JWT_SECRET,
-          { expiresIn: "1d" }
-        ),
+        token,
         role: user.role,
+        attendanceId: attendance._id,
+        date: todayStr,
         attendanceStatus: attendance.status,
         runningHours
       });
 
-    } else {
-      // ---------------------------
-      // Non-employee login
-      // ---------------------------
-      const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "1d" });
-      return res.json({ success: true, token, role: user.role });
     }
 
+    // ---------------------------
+    // Non Employee Login
+    // ---------------------------
+    const token = jwt.sign(
+      {
+        id: user._id,
+        role: user.role
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1d"
+      }
+    );
+
+    return res.json({
+      success: true,
+      token,
+      role: user.role
+    });
+
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+
   }
+
 };
 // ---------------------------
 // Change Password
