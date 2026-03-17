@@ -12,7 +12,8 @@ const DepartmentSchema = new mongoose.Schema({
   },
   description: {
     type: String
-  }
+  },
+  employeeCount: { type: Number, default: 0 } 
 }, { timestamps: true });
 
 module.exports = mongoose.model("Department", DepartmentSchema);

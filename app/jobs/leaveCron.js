@@ -57,9 +57,3 @@ cron.schedule("* * * * *", async () => {
 
 });
 
-
-// // Runs every December 31 at 11:59 PM
-// cron.schedule("59 23 31 12 *", async () => {
-//   const nextYear = new Date().getFullYear() + 1;
-//   await generateWeekends(nextYear);
-// });

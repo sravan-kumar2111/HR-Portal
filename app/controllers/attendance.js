@@ -1,14 +1,61 @@
 const Attendance = require("../models/Attendance");
 const mongoose = require("mongoose");
 const cron = require("node-cron");
+// // ---------------------------
+// // Logout Session
+// // ---------------------------
+// exports.logoutSession = async (req, res) => {
+//   try {
+
+//     console.log("BODY DATA:", req.body);
+
+//     const userId = req.body?.employeeId;
+
+//     if (!userId) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "employeeId required"
+//       });
+//     }
+
+//     const objectId = new mongoose.Types.ObjectId(userId);
+
+//     const today = new Date().toISOString().split("T")[0];
+
+//     const attendance = await Attendance.findOne({
+//       employeeId: objectId,
+//       date: today
+//     });
+
+//     if (!attendance) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Attendance not found"
+//       });
+//     }
+
+//     attendance.lastLogout = new Date();
+
+//     await calculateWorkHours(attendance);
+
+//     await attendance.save();
+
+//     res.json({
+//       success: true,
+//       message: "Logout recorded",
+//       totalWorkHours: attendance.totalWorkHours,
+//       status: attendance.status
+//     });
+
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// };
 // ---------------------------
 // Logout Session
 // ---------------------------
 exports.logoutSession = async (req, res) => {
   try {
-
-    console.log("BODY DATA:", req.body);
-
     const userId = req.body?.employeeId;
 
     if (!userId) {
@@ -34,9 +81,24 @@ exports.logoutSession = async (req, res) => {
       });
     }
 
-    attendance.lastLogout = new Date();
+    // 👉 Get last session
+    const lastSession = attendance.sessions[attendance.sessions.length - 1];
 
-    await calculateWorkHours(attendance);
+    if (!lastSession || lastSession.logoutTime) {
+      return res.status(400).json({
+        success: false,
+        message: "No active session found"
+      });
+    }
+
+    // 👉 Set logout time
+    lastSession.logoutTime = new Date();
+
+    // 👉 Update lastLogout (for UI purpose only)
+    attendance.lastLogout = lastSession.logoutTime;
+
+    // 👉 Calculate correct hours
+ await calculateWorkHours(attendance, false);
 
     await attendance.save();
 
@@ -51,7 +113,6 @@ exports.logoutSession = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
 
 
 // ---------------------------
@@ -196,23 +257,14 @@ exports.getLiveHours = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
-
-// ---------------------------
-// ---------------------------
-// Auto Logout Cron (6:30 PM IST)
-// ---------------------------
+////////
 cron.schedule("30 18 * * *", async () => {
   try {
 
-    // 🇮🇳 Get India Date
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "Asia/Kolkata"
     });
 
-    // ---------------------------
-    // Weekend Check
-    // ---------------------------
     const day = new Date().toLocaleString("en-US", {
       weekday: "long",
       timeZone: "Asia/Kolkata"
@@ -223,9 +275,6 @@ cron.schedule("30 18 * * *", async () => {
       return;
     }
 
-    // ---------------------------
-    // Holiday Check
-    // ---------------------------
     const holiday = await Holiday.findOne({ date: today });
 
     if (holiday) {
@@ -233,30 +282,27 @@ cron.schedule("30 18 * * *", async () => {
       return;
     }
 
-    // ---------------------------
-    // Get Today Attendance
-    // ---------------------------
     const records = await Attendance.find({ date: today });
 
+    // ✅ FIXED LOOP
     for (const r of records) {
 
-      if (!r.lastLogout && r.firstLogin) {
+      const lastSession = r.sessions[r.sessions.length - 1];
 
+      if (lastSession && !lastSession.logoutTime) {
+        lastSession.logoutTime = new Date();
         r.lastLogout = new Date();
-
-        await calculateWorkHours(r);
-
-        await r.save();
       }
 
+      await calculateWorkHours(r, true);
+
+      await r.save();
     }
 
     console.log("Auto logout executed at 6:30 PM IST");
 
   } catch (err) {
-
     console.log("Auto logout error:", err);
-
   }
 
 }, {
@@ -428,18 +474,20 @@ exports.hrUpdateAttendance = async (req, res) => {
 // ---------------------------
 // Calculate Work Hours
 // ---------------------------
-const calculateWorkHours = async (attendance) => {
+const calculateWorkHours = async (attendance, isFinal = false) => {
 
-  if (!attendance.firstLogin || !attendance.lastLogout) return;
+  if (!attendance.sessions || attendance.sessions.length === 0) return;
 
-  // Total working time
-  let totalMs = attendance.lastLogout - attendance.firstLogin;
+  let totalMs = 0;
 
-  // ---------------------------
-  // Subtract Break Time
-  // ---------------------------
+  attendance.sessions.forEach(session => {
+    if (session.loginTime && session.logoutTime) {
+      totalMs += (session.logoutTime - session.loginTime);
+    }
+  });
+
+  // Break time
   let breakMs = 0;
-
   if (attendance.breaks && attendance.breaks.length > 0) {
     attendance.breaks.forEach(b => {
       if (b.start && b.end) {
@@ -448,21 +496,19 @@ const calculateWorkHours = async (attendance) => {
     });
   }
 
-  totalMs = totalMs - breakMs;
+  totalMs -= breakMs;
 
   const hours = totalMs / (1000 * 60 * 60);
-
   attendance.totalWorkHours = parseFloat(hours.toFixed(2));
 
-  // ---------------------------
-  // Set Status
-  // ---------------------------
-  if (attendance.totalWorkHours >= 8) {
-    attendance.status = "Present";
-  } else if (attendance.totalWorkHours >= 4) {
-    attendance.status = "Half Day";
-  } else {
-    attendance.status = "Absent";
+  // ❗ ONLY set status at end of day
+  if (isFinal) {
+    if (attendance.totalWorkHours >= 7) {
+      attendance.status = "Present";
+    } else if (attendance.totalWorkHours >= 4) {
+      attendance.status = "Half Day";
+    } else {
+      attendance.status = "Absent";
+    }
   }
-
 };

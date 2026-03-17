@@ -11,6 +11,7 @@ const projectController = require("../controllers/project");
 const taskController = require("../controllers/task");
 const salaryController = require("../controllers/salary");
 const payslipController = require("../controllers/payslip");
+const announcementController = require("../controllers/announcement");
 
 
 
@@ -100,6 +101,15 @@ router.get("/payslips/:payslipId/download", salaryController.downloadPayslip);
 
 // // Payslip 
 router.get("/getPayslipsById/:employeeId", payslipController.getPayslipsByEmployee);
+
+
+
+//Announcement
+router.post("/addAnnouncement", announcementController.createAnnouncement);
+router.get("/getBydepartment", announcementController.getAnnouncements);
+router.get("/getAnnouncementAll", announcementController.getAllAnnouncements);
+router.put("/updateAnnouncementById/:id", announcementController.updateAnnouncement);
+router.delete("/deleteAnnouncementById/:id", announcementController.deleteAnnouncement);
 
 
 

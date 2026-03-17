@@ -72,7 +72,7 @@ const UserSchema = new mongoose.Schema({
 
   gender: {
     type: String,
-    enum: ["male", "female", "other"]
+    enum: ["Male", "Female", "Other"]
   },
 
   dateOfBirth: {
@@ -103,7 +103,10 @@ const UserSchema = new mongoose.Schema({
   passwordChangedAt: {
     type: Date,
     default: Date.now
-  }
+  },
+  // ✅ Here we link the employee to a Department
+  department: { type: mongoose.Schema.Types.ObjectId, ref: "Department", required: true },
+
 
 }, { timestamps: true });
 

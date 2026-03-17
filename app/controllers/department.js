@@ -1,4 +1,7 @@
 const Department = require("../models/Department");
+const User = require("../models/user");
+const bcrypt = require("bcryptjs");   
+const mongoose = require("mongoose");  
 
 // CREATE DEPARTMENT
 exports.createDepartment = async (req, res) => {
@@ -38,34 +41,68 @@ exports.createDepartment = async (req, res) => {
 };
 
 // GET ALL DEPARTMENTS
+// GET ALL DEPARTMENTS WITH DYNAMIC EMPLOYEE COUNT
 exports.getDepartments = async (req, res) => {
   try {
-    const departments = await Department.find();
-    res.json({
-      success: true,
-      departments
-    });
+    const departments = await Department.aggregate([
+      {
+        $lookup: {
+          from: "users",          // MongoDB collection name for employees
+          localField: "_id",      // Department _id
+          foreignField: "department", // Employee.department field
+          as: "employees"
+        }
+      },
+      {
+        $addFields: { employeeCount: { $size: "$employees" } }
+      },
+      {
+        $project: { employees: 0 } // remove the full employees array
+      }
+    ]);
+
+    res.json({ success: true, departments });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// GET SINGLE DEPARTMENT
+
+// GET SINGLE DEPARTMENT WITH EMPLOYEE COUNT
+
 exports.getDepartment = async (req, res) => {
   try {
-    const department = await Department.findById(req.params.id);
-    if (!department) {
+    const departmentId = req.params.id;
+
+    // Aggregate to get the department and employee count
+    const result = await Department.aggregate([
+      { $match: { _id: new mongoose.Types.ObjectId(departmentId) } },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "department",
+          as: "employees"
+        }
+      },
+      {
+        $addFields: { employeeCount: { $size: "$employees" } }
+      },
+      {
+        $project: { employees: 0 }
+      }
+    ]);
+
+    if (!result || result.length === 0) {
       return res.status(404).json({
         success: false,
         message: "Department not found"
       });
     }
+
     res.json({
       success: true,
-      department
+      department: result[0]
     });
   } catch (error) {
     res.status(500).json({
@@ -74,7 +111,6 @@ exports.getDepartment = async (req, res) => {
     });
   }
 };
-
 // UPDATE DEPARTMENT
 exports.updateDepartment = async (req, res) => {
   try {

@@ -1,35 +1,105 @@
 const User = require("../models/user");
 const bcrypt = require("bcryptjs");
+const Department = require("../models/Department");
+// exports.createEmployee = async (req, res) => {
+
+//   try {
+
+//     const { name, email, department, designation, empId, phone, gender, dateOfBirth, dateOfJoining, address } = req.body;
+
+//     // Check duplicate email
+//     const existingEmployee = await User.findOne({ email });
+
+//     if (existingEmployee) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Employee already exists with this email"
+//       });
+//     }
+
+//     const tempPassword = "Emp@12345";
+
+//     const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+//     const employee = new User({
+//       name,
+//       empId,
+//       email,
+//       password: hashedPassword,
+//       role: "employee",
+//       department,
+//       designation,
+//       empId, 
+//       phone,
+//       gender,
+//       dateOfBirth,
+//       dateOfJoining,
+//       address,
+//       firstLogin: true
+//     });
+
+//     await employee.save();
+
+//     res.status(201).json({
+//       success: true,
+//       message: "Employee created successfully",
+//       temporaryPassword: tempPassword
+//     });
+
+//   } catch (error) {
+
+//     res.status(500).json({
+//       success: false,
+//       message: error.message
+//     });
+
+//   }
+
+// };
 
 exports.createEmployee = async (req, res) => {
-
   try {
+    const { name, email, departmentId, designation, empId, phone, gender, dateOfBirth, dateOfJoining, address } = req.body;
 
-    const { name, email, department, designation, empId, phone, gender, dateOfBirth, dateOfJoining, address } = req.body;
-
-    // Check duplicate email
-    const existingEmployee = await User.findOne({ email });
-
-    if (existingEmployee) {
+    // 1️⃣ Validate required fields
+    if (!name || !email || !empId || !departmentId) {
       return res.status(400).json({
         success: false,
-        message: "Employee already exists with this email"
+        message: "Name, Email, EmpId and Department are required"
       });
     }
 
-    const tempPassword = "Emp@12345";
+    // 2️⃣ Check duplicate email or empId
+    const existingEmployee = await User.findOne({ $or: [{ email }, { empId }] });
+    if (existingEmployee) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee already exists with this email or empId"
+      });
+    }
 
+    // 3️⃣ Check department exists
+    const department = await Department.findById(departmentId);
+    if (!department) {
+      return res.status(404).json({
+        success: false,
+        message: "Department not found"
+      });
+    }
+
+    // 4️⃣ Generate temporary password
+    const tempPassword = "Emp@12345";
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
+    // 5️⃣ Create employee
     const employee = new User({
       name,
       empId,
       email,
       password: hashedPassword,
       role: "employee",
-      department,
+      department: department._id, // store ObjectId
       designation,
-      empId, 
       phone,
       gender,
       dateOfBirth,
@@ -40,23 +110,23 @@ exports.createEmployee = async (req, res) => {
 
     await employee.save();
 
+    // 6️⃣ Increment department employee count
+    await Department.findByIdAndUpdate(department._id, { $inc: { employeeCount: 1 } });
+
     res.status(201).json({
       success: true,
       message: "Employee created successfully",
-      temporaryPassword: tempPassword
+      temporaryPassword: tempPassword,
+      employee
     });
 
   } catch (error) {
-
     res.status(500).json({
       success: false,
       message: error.message
     });
-
   }
-
 };
-
 /////////////////////////
 // GET ALL EMPLOYEES
 /////////////////////////
@@ -142,20 +212,55 @@ exports.updateEmployee = async (req, res) => {
 /////////////////////////
 // DELETE EMPLOYEE
 /////////////////////////
+// exports.deleteEmployee = async (req, res) => {
+//   try {
+//     const employeeId = req.params.id;
+
+//     const user = await User.findByIdAndDelete(employeeId);
+
+//     if (!user) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Employee not found"
+//       });
+//     }
+
+//     res.json({
+//       success: true,
+//       message: "Employee deleted successfully"
+//     });
+
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       message: error.message
+//     });
+//   }
+// };
+
 exports.deleteEmployee = async (req, res) => {
   try {
-    const employeeId = req.params.id;
+    const employee = await User.findById(req.params.id);
 
-    const user = await User.findByIdAndDelete(employeeId);
-
-    if (!user) {
+    if (!employee) {
       return res.status(404).json({
         success: false,
         message: "Employee not found"
       });
     }
 
-    res.json({
+    // Delete the employee
+    await User.findByIdAndDelete(req.params.id);
+
+    // Decrement employeeCount in the department
+    if (employee.department) {
+      await Department.findByIdAndUpdate(
+        employee.department,
+        { $inc: { employeeCount: -1 } }
+      );
+    }
+
+    res.status(200).json({
       success: true,
       message: "Employee deleted successfully"
     });
