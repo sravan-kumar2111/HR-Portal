@@ -13,7 +13,13 @@ const DepartmentSchema = new mongoose.Schema({
   description: {
     type: String
   },
-  employeeCount: { type: Number, default: 0 } 
+  employeeCount: { type: Number, default: 0 } ,
+    // ✅ NEW FIELD
+  weekOffDays: {
+    type: [String],  // array of days
+    enum: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+    default: []
+  }
 }, { timestamps: true });
 
 module.exports = mongoose.model("Department", DepartmentSchema);

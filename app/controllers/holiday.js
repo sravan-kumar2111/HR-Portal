@@ -198,64 +198,110 @@ exports.deleteHoliday = async (req, res) => {
 // ---------------------------
 // Generate Weekends (Custom Year)
 // ---------------------------
-exports.runAutoWeekend = async (req, res) => {
-  try {
+// exports.runAutoWeekend = async (req, res) => {
+//   try {
 
-    // 👉 get year from body (default = current year)
-    const inputYear = req.body.year || new Date().getFullYear();
+//     // 👉 get year from body (default = current year)
+//     const inputYear = req.body.year || new Date().getFullYear();
 
-    // 👉 generate for selected year + next year
-    const years = [inputYear, inputYear + 1];
+//     // 👉 generate for selected year + next year
+//     const years = [inputYear, inputYear + 1];
 
-    let allInserted = [];
+//     let allInserted = [];
 
-    for (const year of years) {
+//     for (const year of years) {
 
-      const weekends = [];
+//       const weekends = [];
 
-      for (let month = 0; month < 12; month++) {
+//       for (let month = 0; month < 12; month++) {
 
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
+//         const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-        for (let day = 1; day <= daysInMonth; day++) {
+//         for (let day = 1; day <= daysInMonth; day++) {
 
-          const dateObj = new Date(year, month, day);
-          const dayOfWeek = dateObj.getDay();
+//           const dateObj = new Date(year, month, day);
+//           const dayOfWeek = dateObj.getDay();
 
-          if (dayOfWeek === 0 || dayOfWeek === 6) {
+//           if (dayOfWeek === 0 || dayOfWeek === 6) {
 
-            const istDate = new Date(dateObj).toLocaleDateString("en-CA", {
-              timeZone: "Asia/Kolkata"
-            });
+//             const istDate = new Date(dateObj).toLocaleDateString("en-CA", {
+//               timeZone: "Asia/Kolkata"
+//             });
 
-            weekends.push({
-              holidayName: dayOfWeek === 0 ? "Sunday" : "Saturday",
-              date: istDate
-            });
-          }
-        }
-      }
+//             weekends.push({
+//               holidayName: dayOfWeek === 0 ? "Sunday" : "Saturday",
+//               date: istDate
+//             });
+//           }
+//         }
+//       }
 
-      const inserted = await Holiday.insertMany(weekends, { ordered: false });
+//       const inserted = await Holiday.insertMany(weekends, { ordered: false });
 
-      allInserted = allInserted.concat(inserted);
-    }
+//       allInserted = allInserted.concat(inserted);
+//     }
 
-    return res.json({
-      success: true,
-      message: allInserted.length
-        ? `${allInserted.length} weekends generated for ${inputYear} & ${inputYear + 1}`
-        : "All weekends already exist",
-      data: allInserted
-    });
+//     return res.json({
+//       success: true,
+//       message: allInserted.length
+//         ? `${allInserted.length} weekends generated for ${inputYear} & ${inputYear + 1}`
+//         : "All weekends already exist",
+//       data: allInserted
+//     });
 
-  } catch (err) {
+//   } catch (err) {
 
-    return res.json({
-      success: true,
-      message: "All weekends already exist",
-      data: []
-    });
+//     return res.json({
+//       success: true,
+//       message: "All weekends already exist",
+//       data: []
+//     });
 
+//   }
+// };
+const checkDayStatus = async (date, department) => {
+
+  // Convert to IST properly
+  const inputDate = new Date(date);
+
+  const istDate = new Date(
+    inputDate.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+  );
+
+  // Normalize IST start & end
+  const start = new Date(istDate);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(istDate);
+  end.setHours(23, 59, 59, 999);
+
+  // 1️⃣ Check Holiday (IST based)
+  const holiday = await Holiday.findOne({
+    date: { $gte: start, $lte: end }
+  });
+
+  if (holiday) {
+    return {
+      type: "HOLIDAY",
+      message: holiday.holidayName
+    };
   }
+
+  // 2️⃣ Get day name in IST
+  const dayName = istDate.toLocaleString("en-US", {
+    weekday: "long",
+    timeZone: "Asia/Kolkata"
+  });
+
+  // 3️⃣ Check Week-Off
+  if (department.weekOffDays.includes(dayName)) {
+    return {
+      type: "WEEKOFF",
+      message: dayName
+    };
+  }
+
+  return {
+    type: "WORKING"
+  };
 };

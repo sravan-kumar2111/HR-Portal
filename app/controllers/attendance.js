@@ -228,7 +228,8 @@ exports.endBreak = async (req, res) => {
 exports.getLiveHours = async (req, res) => {
   try {
 
-    const userId = req.body.employeeId;
+    // const userId = req.body.employeeId;
+    const userId = req.query.employeeId; // ✅ FIXED
 
     const today = new Date().toISOString().split("T")[0];
 

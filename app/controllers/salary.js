@@ -4,6 +4,7 @@ const path = require("path");
 const PDFDocument = require("pdfkit");
 const mongoose = require("mongoose"); 
 const cron = require("node-cron");
+const User = require("../models/user");
 
 /**
  * 1️⃣ Add Employee with Base Salary

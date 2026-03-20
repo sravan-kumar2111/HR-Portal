@@ -81,7 +81,13 @@ department: {
     firstLogin: {
       type: Boolean,
       default: true
-    }
+    },
+    resetToken: {
+  type: String
+},
+resetTokenExpiry: {
+  type: Date
+}
   },
   {
     timestamps: true

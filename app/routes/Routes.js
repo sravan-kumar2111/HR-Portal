@@ -29,6 +29,8 @@ router.post("/login", authController.login);
 
 // Change password
 router.post("/changepassword", authController.changePassword);
+router.post("/forgot-password", authController.forgotPassword);
+router.post("/reset-password", authController.resetPassword);
 
 
 // Create employee
@@ -75,7 +77,7 @@ router.get("/getHolidays", holidayController.getAllHolidays);
 router.post("/createholidays", holidayController.addMultipleHolidays);
 router.put("/updateholidays/:id", holidayController.updateHoliday);
 router.delete("/deleteholidays/:id", holidayController.deleteHoliday);
-router.post("/auto-weekends", holidayController.runAutoWeekend);
+
 
 
 // Create a project
