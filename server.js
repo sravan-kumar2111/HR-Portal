@@ -44,6 +44,9 @@ const express = require("express");
 const mongoose = require("mongoose");
 require("dotenv").config();
 
+
+
+
 const app = express();
 
 // BODY PARSER (must be first)
@@ -52,12 +55,13 @@ app.use(express.urlencoded({ extended: true }));
 
 // ROUTES
 app.use('/', UserRoute);
+ // Mount admin routes
+
+
 
 // Database config
 const dbConfig = require("./config/database.config.js");
 require("./app/jobs/leaveCron"); // Load the cron job
-
-
 
 mongoose.Promise = global.Promise;
 
@@ -78,4 +82,11 @@ app.get("/", (req, res) => {
 // Start server
 app.listen(3000, () => {
     console.log("Server is listening on port 3000");
+});
+
+const createAdmin = require("./utils/createAdmin");
+
+app.listen(5000, async () => {
+  console.log("Server running...");
+  await createAdmin();
 });

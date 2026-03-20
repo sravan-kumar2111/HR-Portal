@@ -1,22 +1,27 @@
 const express = require('express')
 const router = express.Router();
+// const auth  = require("../middlewares/auth.js");
+// const authorizeRoles = require("../middlewares/role.js");
+const { auth } = require("../middlewares/auth");
 const adminController = require("../controllers/adminController");
 const authController = require("../controllers/auth.controller");
 const hrController = require("../controllers/hrController");
 const departmentController = require("../controllers/department");
 const attendanceController = require("../controllers/attendance");
-const authMiddleware = require("../middlewares/auth.middleware");
 const leaveController = require("../controllers/leaveController");
 const projectController = require("../controllers/project");
 const taskController = require("../controllers/task");
 const salaryController = require("../controllers/salary");
 const payslipController = require("../controllers/payslip");
 const announcementController = require("../controllers/announcement");
-
+const { createDefaultAdmin } = require("../../utils/createAdmin");
+const { authorizeRoles } = require("../middlewares/role");
 
 
 // Create HR
 router.post("/create-hr", adminController.createHR);
+
+
 
 
 // Login

@@ -136,6 +136,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const Attendance = require("../models/Attendance");
 const Holiday = require("../models/Holiday");
+const mongoose = require("mongoose");
 
 // // ---------------------------
 // // Employee Login
@@ -543,5 +544,26 @@ exports.changePassword = async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
+};
+
+
+exports.adminLogin = async (req, res) => {
+  const { email, password } = req.body;
+
+  // Only allow the predefined admin email
+  if (email !== 'admin@example.com') {
+    return res.status(401).json({ success: false, message: 'Invalid email' });
+  }
+
+  const admin = await User.findOne({ email });
+  if (!admin) return res.status(401).json({ success: false, message: 'Admin not found' });
+
+  const isMatch = await bcrypt.compare(password, admin.password);
+  if (!isMatch) return res.status(401).json({ success: false, message: 'Wrong password' });
+
+  // Create JWT
+  const token = jwt.sign({ id: admin._id, role: 'admin' }, 'YOUR_SECRET_KEY', { expiresIn: '1h' });
+
+  res.json({ success: true, token, message: 'Admin logged in' });
 };
 
