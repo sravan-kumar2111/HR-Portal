@@ -16,6 +16,10 @@ const payslipController = require("../controllers/payslip");
 const announcementController = require("../controllers/announcement");
 const { createDefaultAdmin } = require("../../utils/createAdmin");
 const { authorizeRoles } = require("../middlewares/role");
+const documentController = require("../controllers/document");
+
+const upload = require("../middlewares/upload"); 
+
 
 
 // Create HR
@@ -107,7 +111,10 @@ router.get("/payslips/:payslipId/download", salaryController.downloadPayslip);
 
 
 // // Payslip 
-router.get("/getPayslipsById/:employeeId", payslipController.getPayslipsByEmployee);
+router.get("/getPayslipsByEmpId/:employeeId", payslipController.getPayslipsByEmployee);
+
+router.get("/payslip/:payslipId", payslipController.getPayslipById);
+
 
 
 
@@ -131,6 +138,16 @@ router.get("/getAllDepartments", departmentController.getDepartments);
 router.get("/getDepartmentById/:id", departmentController.getDepartment);
 router.put("/updateDepartment/:id", departmentController.updateDepartment);
 router.delete("/deleteDepartment/:id", departmentController.deleteDepartment);
+
+
+
+// Upload document
+router.post("/upload", upload.any(),  documentController.uploadDocument);
+router.get('/:id/download', documentController.downloadDocument);
+router.get("/getdocumentsAll", documentController.getAllDocuments);
+router.get("/documentsById/:id", documentController.getDocumentById);
+router.put("/updateDocumentById/:id", documentController.updateDocument);
+router.delete("/deleteDocumentById/:id", documentController.deleteDocument);
 
 
 

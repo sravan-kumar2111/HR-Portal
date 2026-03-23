@@ -69,6 +69,7 @@ const app = express();
 // ✅ BODY PARSER FIRST
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use("/uploads", express.static("uploads"));
 
 // ✅ CORS
 app.use(cors());

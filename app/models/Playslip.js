@@ -1,7 +1,11 @@
 const mongoose = require("mongoose");
 
 const payslipSchema = new mongoose.Schema({
-  employeeId: { type: mongoose.Schema.Types.ObjectId, ref: "Salary", required: true }, // 🔹 Change "Employee" to "Salary"
+  employeeId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Salary", // Reference to Salary (Employee)
+  required: true
+},
   month: { type: String, required: true },
   year: { type: Number, required: true },
   amountCredited: { type: Number, required: true },
