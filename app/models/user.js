@@ -13,12 +13,22 @@ const UserSchema = new mongoose.Schema(
     //   required: true,
     //   unique: true
     // },
-    empId: {
+//     empId: {
+//   type: String,
+//   unique: true,
+//   required: function () {
+//     return this.role !== "admin";
+//   }
+// },
+empId: {
   type: String,
   unique: true,
+  uppercase: true,   // ✅ auto converts mct1005 → MCT1005
+  trim: true,        // ✅ removes spaces
   required: function () {
     return this.role !== "admin";
-  }
+  },
+   match: [/^[A-Z]{3}\d{4}$/, "Employee ID must be like ABC1234"]
 },
 
     email: {
@@ -36,7 +46,7 @@ const UserSchema = new mongoose.Schema(
 
     role: {
       type: String,
-      enum: ["admin", "hr", "employee"],
+      enum: ["admin", "hr", "employee", "manager"],
       default: "employee"
     },
 

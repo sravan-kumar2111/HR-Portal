@@ -4,7 +4,7 @@ const Project = require("../models/project");
 const Employee = require("../models/user");
 
 // --------------------------
-// 1. Employee adds a new task
+// 1. Employee adds a new task8
 // --------------------------
 exports.addTask = async (req, res) => {
   try {

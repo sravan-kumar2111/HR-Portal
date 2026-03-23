@@ -1,5 +1,6 @@
 const User = require("../models/user");
 const Department = require("../models/Department");
+const Attendance = require("../models/Attendance");
 const bcrypt = require("bcryptjs");
 const { v4: uuidv4 } = require("uuid"); // optional, for generating empId
 
@@ -38,7 +39,8 @@ exports.createHR = async (req, res) => {
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
     // 5️⃣ Generate empId
-    const empId = "HR-" + uuidv4().slice(0, 8);
+    // const empId = "HR-" + uuidv4().slice(0, 8);
+    const empId = "HRM" + Math.floor(1000 + Math.random() * 9000);
 
     // 6️⃣ Create HR
     const hr = new User({

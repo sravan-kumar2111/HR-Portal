@@ -18,7 +18,7 @@ exports.addEmployee = async (req, res) => {
       return res.status(400).json({ message: "Employee ID is required and must be a string" });
     }
 
-    const pattern = /^EMP\d{3,5}$/; // e.g., EMP001
+   const pattern = /^[A-Z]{3}\d{4}$/;
     if (!pattern.test(employeeId)) {
       return res.status(400).json({ message: "Employee ID must be in format EMP001, EMP002, etc." });
     }
