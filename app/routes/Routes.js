@@ -17,7 +17,7 @@ const announcementController = require("../controllers/announcement");
 const { createDefaultAdmin } = require("../../utils/createAdmin");
 const { authorizeRoles } = require("../middlewares/role");
 const documentController = require("../controllers/document");
-
+const idealController = require("../controllers/ideal");
 const upload = require("../middlewares/upload"); 
 
 
@@ -148,6 +148,9 @@ router.get("/getdocumentsAll", documentController.getAllDocuments);
 router.get("/documentsById/:id", documentController.getDocumentById);
 router.put("/updateDocumentById/:id", documentController.updateDocument);
 router.delete("/deleteDocumentById/:id", documentController.deleteDocument);
+
+router.post("/saveIdleTime", idealController.saveIdleTime);
+router.get("/idleTimeByEmployee/:employeeId", idealController.getIdleTimeByEmployee);
 
 
 
