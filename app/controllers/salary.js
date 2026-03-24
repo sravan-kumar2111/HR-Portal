@@ -5,151 +5,74 @@ const PDFDocument = require("pdfkit");
 const mongoose = require("mongoose"); 
 const cron = require("node-cron");
 const User = require("../models/user");
-
-// /**
-//  * 1️⃣ Add Employee with Base Salary
-//  */
-// exports.addEmployee = async (req, res) => {
-//   try {
-//     const { employeeId, name, email, department, baseSalary } = req.body;
-
-//     // Validate employeeId
-//     if (!employeeId || typeof employeeId !== "string") {
-//       return res.status(400).json({ message: "Employee ID is required and must be a string" });
-//     }
-
-//    const pattern = /^[A-Z]{3}\d{4}$/;
-//     if (!pattern.test(employeeId)) {
-//       return res.status(400).json({ message: "Employee ID must be in format EMP001, EMP002, etc." });
-//     }
-
-//     // Check duplicates
-//     const existing = await Salary.findOne({ $or: [{ employeeId }, { email }] });
-//     if (existing) {
-//       return res.status(400).json({ message: "Employee ID or Email already exists" });
-//     }
-
-//     // Create employee
-//     const employee = await Salary.create({
-//       employeeId,
-//       name,
-//       email,
-//       department,
-//       baseSalary,
-//       payslips: []
-//     });
-
-//     // Create first month payslip
-//     const currentMonth = new Date().toLocaleString('default', { month: 'long' });
-//     const currentYear = new Date().getFullYear();
-
-//     const payslip = await Payslip.create({
-//       employeeId: employee._id,
-//       month: currentMonth,
-//       year: currentYear,
-//       amountCredited: baseSalary
-//     });
-
-//     employee.payslips.push(payslip._id);
-//     await employee.save();
-
-//     res.status(201).json({
-//       success: true,
-//       message: "Employee added with base salary",
-//       employee,
-//       firstPayslip: payslip
-//     });
-
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: "Server Error" });
-//   }
-// };
-/**
- * Add Employee with Base Salary
- */
 exports.addEmployee = async (req, res) => {
   try {
-    const { employeeId, name, email, department, baseSalary } = req.body;
+    const { employeeId, baseSalary } = req.body;
 
-    // ---------------------------
-    // 1️⃣ Validate input
-    // ---------------------------
-    if (!employeeId || typeof employeeId !== "string") {
-      return res.status(400).json({ message: "Employee ID is required and must be a string" });
+    if (!employeeId) {
+      return res.status(400).json({ message: "Employee ID (_id) is required" });
     }
 
-    const pattern = /^[A-Z]{3}\d{4}$/;
-    if (!pattern.test(employeeId)) {
-      return res.status(400).json({ message: "Employee ID must be in format EMP001, EMP002, etc." });
+    if (!baseSalary) {
+      return res.status(400).json({ message: "Base salary is required" });
     }
 
-    if (!name || !email || !department || !baseSalary) {
-      return res.status(400).json({ message: "All fields are required" });
+    // ✅ Use User instead of Employee
+    const existingEmployee = await User.findById(employeeId);
+
+    if (!existingEmployee) {
+      return res.status(404).json({ message: "Employee not found" });
     }
 
-    // ---------------------------
-    // 2️⃣ Check duplicates
-    // ---------------------------
-    const existing = await Salary.findOne({ $or: [{ employeeId }, { email }] });
-    if (existing) {
-      return res.status(400).json({ message: "Employee ID or Email already exists" });
+    // Optional: ensure only employees (if role exists)
+    // if (existingEmployee.role !== "employee") {
+    //   return res.status(400).json({ message: "User is not an employee" });
+    // }
+
+    const alreadyExists = await Salary.findOne({ employeeId });
+    if (alreadyExists) {
+      return res.status(400).json({ message: "Salary already assigned to this employee" });
     }
 
-    // ---------------------------
-    // 3️⃣ Create Employee
-    // ---------------------------
-    const employee = await Salary.create({
-      employeeId,
-      name,
-      email,
-      department,
+    const salary = await Salary.create({
+      employeeId: existingEmployee._id,
+      name: existingEmployee.name,
+      email: existingEmployee.email,
+      department: existingEmployee.department,
       baseSalary,
       payslips: []
     });
 
-    // ---------------------------
-    // 4️⃣ Create First Month Payslip
-    // ---------------------------
     const currentMonth = new Date().toLocaleString('default', { month: 'long' });
     const currentYear = new Date().getFullYear();
 
     const payslip = await Payslip.create({
-      employeeId: employee._id, // ObjectId reference
+      employeeId: existingEmployee._id,
       month: currentMonth,
       year: currentYear,
       amountCredited: baseSalary
     });
 
-    // Save payslip reference in employee
-    employee.payslips.push(payslip._id);
-    await employee.save();
+    salary.payslips.push(payslip._id);
+    await salary.save();
 
-    // ---------------------------
-    // 5️⃣ Send Response
-    // ---------------------------
     res.status(201).json({
       success: true,
-      message: "Employee added with base salary",
+      message: "Salary added to existing user",
       employee: {
-        _id: employee._id,
-        employeeId: employee.employeeId, // shows MCT0001
-        name: employee.name,
-        email: employee.email,
-        department: employee.department,
-        baseSalary: employee.baseSalary
+        _id: existingEmployee._id,
+        name: existingEmployee.name,
+        email: existingEmployee.email,
+        department: existingEmployee.department
       },
-      firstPayslip: {
-        _id: payslip._id,
-        employeeId: employee.employeeId, // shows MCT0001
-        month: payslip.month,
-        year: payslip.year,
-        amountCredited: payslip.amountCredited
-      }
+      salary: {
+        baseSalary: salary.baseSalary
+      },
+      firstPayslip: payslip
     });
 
   } catch (err) {
-    console.error("Add Employee Error:", err);
+    console.error("Add Employee Salary Error:", err);
     res.status(500).json({ message: "Server Error", error: err.message });
   }
 };

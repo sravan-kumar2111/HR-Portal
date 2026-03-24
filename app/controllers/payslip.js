@@ -77,37 +77,53 @@ const Salary = require("../models/Salary");
 const Payslip = require("../models/Playslip");
 const mongoose = require("mongoose");
 
-
 exports.getPayslipsByEmployee = async (req, res) => {
   try {
-    const { employeeId } = req.params; // e.g., "MCT1006"
+    const { employeeId } = req.params; // now this is ObjectId
 
-    // Step 1: Find the employee by custom employeeId
-    const employee = await Salary.findOne({ employeeId }).populate({
-      path: "payslips",
-      select: "month year amountCredited",
-      options: { sort: { year: -1, month: -1 } } // latest first
-    });
+    // ---------------------------
+    // 1️⃣ Validate ObjectId
+    // ---------------------------
+    if (!mongoose.Types.ObjectId.isValid(employeeId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid employee ID"
+      });
+    }
+
+    // ---------------------------
+    // 2️⃣ Find salary by ObjectId
+    // ---------------------------
+    const employee = await Salary.findOne({ employeeId })
+      .populate({
+        path: "payslips",
+        select: "month year amountCredited",
+        options: { sort: { year: -1, month: -1 } }
+      });
 
     if (!employee) {
       return res.status(404).json({
         success: false,
-        message: "Employee not found"
+        message: "Employee salary not found"
       });
     }
 
-    // Step 2: Format payslips
+    // ---------------------------
+    // 3️⃣ Format payslips
+    // ---------------------------
     const formattedPayslips = employee.payslips.map(ps => ({
       month: ps.month,
       year: ps.year,
       amountCredited: ps.amountCredited
     }));
 
-    // Step 3: Send combined response
+    // ---------------------------
+    // 4️⃣ Response
+    // ---------------------------
     res.status(200).json({
       success: true,
       employee: {
-        employeeId: employee.employeeId,
+        _id: employee.employeeId, // ObjectId
         name: employee.name,
         email: employee.email,
         department: employee.department,
@@ -118,7 +134,11 @@ exports.getPayslipsByEmployee = async (req, res) => {
 
   } catch (err) {
     console.error("Get Employee Payslips Error:", err);
-    res.status(500).json({ success: false, message: "Server Error", error: err.message });
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: err.message
+    });
   }
 };
 // Get Payslip by _id

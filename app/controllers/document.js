@@ -4,21 +4,43 @@ const path = require("path");
 const mongoose = require("mongoose");
 const Employee = require("../models/user");
 
-
-// Upload document
 exports.uploadDocument = async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
+    console.log("BODY:", req.body);
+    console.log("FILES:", req.files);
 
-    const doc = await Document.create({
-      originalName: req.file.originalname,
-      filePath: path.join('uploads', req.file.filename)
+    const { title, description, employeeId } = req.body;
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No files uploaded"
+      });
+    }
+
+    const documents = req.files.map(file => ({
+      title, // ✅ from body
+      description,
+      employeeId,
+      fileType: file.mimetype, // ✅ REQUIRED FIELD
+      originalName: file.originalname,
+      filePath: file.path
+    }));
+
+    const savedDocs = await Document.insertMany(documents);
+
+    res.status(200).json({
+      success: true,
+      message: "Files uploaded successfully",
+      documents: savedDocs
     });
 
-    res.json({ success: true, document: doc });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
   }
 };
 

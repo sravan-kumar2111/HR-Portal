@@ -142,13 +142,18 @@ router.delete("/deleteDepartment/:id", departmentController.deleteDepartment);
 
 
 // Upload document
-router.post("/upload", upload.any(),  documentController.uploadDocument);
+router.post(
+  "/upload",
+  upload.array("files", 10),
+  documentController.uploadDocument
+);
 router.get('/:id/download', documentController.downloadDocument);
 router.get("/getdocumentsAll", documentController.getAllDocuments);
 router.get("/documentsById/:id", documentController.getDocumentById);
 router.put("/updateDocumentById/:id", documentController.updateDocument);
 router.delete("/deleteDocumentById/:id", documentController.deleteDocument);
 
+//Ideal
 router.post("/saveIdleTime", idealController.saveIdleTime);
 router.get("/idleTimeByEmployee/:employeeId", idealController.getIdleTimeByEmployee);
 
