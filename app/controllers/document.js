@@ -155,3 +155,42 @@ exports.deleteDocument = async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
+///////////
+exports.getDocumentsByEmployeeId = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    // ❌ Invalid ObjectId check
+    if (!mongoose.Types.ObjectId.isValid(employeeId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid employee ID format"
+      });
+    }
+
+    // ✅ Fetch documents using ObjectId
+    const documents = await Document.find({
+      employeeId: new mongoose.Types.ObjectId(employeeId)
+    }).sort({ createdAt: -1 });
+
+    if (!documents.length) {
+      return res.status(404).json({
+        success: false,
+        message: "No documents found for this employee"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      count: documents.length,
+      data: documents
+    });
+
+  } catch (err) {
+    console.error("Error fetching documents:", err.message);
+    res.status(500).json({
+      success: false,
+      message: "Server Error"
+    });
+  }
+};

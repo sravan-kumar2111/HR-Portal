@@ -475,41 +475,98 @@ exports.hrUpdateAttendance = async (req, res) => {
 // ---------------------------
 // Calculate Work Hours
 // ---------------------------
-const calculateWorkHours = async (attendance, isFinal = false) => {
+const calculateWorkHours = (attendance, isFinal = false) => {
 
   if (!attendance.sessions || attendance.sessions.length === 0) return;
 
   let totalMs = 0;
 
+  // 👉 Session time
   attendance.sessions.forEach(session => {
     if (session.loginTime && session.logoutTime) {
-      totalMs += (session.logoutTime - session.loginTime);
+      totalMs += (new Date(session.logoutTime) - new Date(session.loginTime));
     }
   });
 
-  // Break time
+  // 👉 Break time
   let breakMs = 0;
+
   if (attendance.breaks && attendance.breaks.length > 0) {
     attendance.breaks.forEach(b => {
       if (b.start && b.end) {
-        breakMs += (b.end - b.start);
+        breakMs += (new Date(b.end) - new Date(b.start));
       }
     });
   }
 
-  totalMs -= breakMs;
+  const totalHours = totalMs / (1000 * 60 * 60);
+  const breakHours = breakMs / (1000 * 60 * 60);
 
-  const hours = totalMs / (1000 * 60 * 60);
-  attendance.totalWorkHours = parseFloat(hours.toFixed(2));
+  const workedHours = totalHours - breakHours;
 
-  // ❗ ONLY set status at end of day
+  attendance.totalWorkHours = parseFloat(workedHours.toFixed(2));
+  attendance.breakHours = parseFloat(breakHours.toFixed(2));
+
+  // ✅ Overtime starts after 8 hours
+  const OVERTIME_THRESHOLD = 8;
+
+  if (workedHours > OVERTIME_THRESHOLD) {
+    attendance.overtimeHours = parseFloat((workedHours - OVERTIME_THRESHOLD).toFixed(2));
+  } else {
+    attendance.overtimeHours = 0;
+  }
+
+  // ✅ Status only at end of day
   if (isFinal) {
-    if (attendance.totalWorkHours >= 7) {
-      attendance.status = "Present";
-    } else if (attendance.totalWorkHours >= 4) {
-      attendance.status = "Half Day";
+
+    if (workedHours >= 7) {
+      attendance.status = "Present";       // ✅ Full Day
+    } else if (workedHours >= 5) {
+      attendance.status = "Half Day";      // ✅ Half Day
     } else {
-      attendance.status = "Absent";
+      attendance.status = "Absent";        // ❌ Absent
     }
+
+  }
+};
+// Get attendance by employeeId
+exports.getAttendanceByEmployeeId = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    // ✅ Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(employeeId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid employee ID format"
+      });
+    }
+
+    // ✅ Fetch all attendance records for employee
+    const records = await Attendance.find({
+      employeeId: new mongoose.Types.ObjectId(employeeId)
+    })
+      .sort({ date: -1 }) // latest first
+      .populate("employeeId", "name email department");
+
+    if (!records.length) {
+      return res.status(404).json({
+        success: false,
+        message: "No attendance records found for this employee"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      count: records.length,
+      data: records
+    });
+
+  } catch (err) {
+    console.error("Error fetching attendance:", err.message);
+    res.status(500).json({
+      success: false,
+      message: "Server Error"
+    });
   }
 };

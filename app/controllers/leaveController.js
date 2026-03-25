@@ -388,3 +388,49 @@ exports.deleteLeaveById = async (req, res) => {
   }
 
 };
+////////////////////
+///////// getAllLeaves /////////
+exports.getAllLeaves = async (req, res) => {
+  try {
+    const { status, leaveType, employeeId, empNumber, year, month } = req.query;
+
+    let filter = {};
+
+    // Optional filters
+    if (status) filter.status = status;
+    if (leaveType) filter.leaveType = leaveType;
+    if (employeeId) filter.employeeId = employeeId;
+    if (empNumber) filter.empNumber = empNumber;
+
+    // Date filter (year/month)
+    if (year) {
+      const start = new Date(year, 0, 1);
+      const end = new Date(year, 11, 31, 23, 59, 59);
+
+      filter.startDate = { $lte: end };
+      filter.endDate = { $gte: start };
+    }
+
+    if (month && year) {
+      const start = new Date(year, month - 1, 1);
+      const end = new Date(year, month, 0, 23, 59, 59);
+
+      filter.startDate = { $lte: end };
+      filter.endDate = { $gte: start };
+    }
+
+    const leaves = await Leave.find(filter)
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      count: leaves.length,
+      data: leaves
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      message: err.message
+    });
+  }
+};

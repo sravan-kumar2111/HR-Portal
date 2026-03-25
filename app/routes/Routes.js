@@ -54,6 +54,7 @@ router.get("/getAllAttendance", attendanceController.getAllAttendance);
 router.get("/getAttendanceById/:id", attendanceController.getAttendanceById);
 router.delete("/deleteAttendanceById/:id", attendanceController.deleteAttendance);
 router.post("/hr-update", attendanceController.hrUpdateAttendance);
+router.get("/getAttendanceByemployee/:employeeId", attendanceController.getAttendanceByEmployeeId);
 
 
 
@@ -66,6 +67,7 @@ router.get("/employeeLeavesByEmpNumber/:empNumber", leaveController.getLeavesByE
 router.get("/leave-calendar", leaveController.getLeaveByEmp);
 router.get("/getLeavesByEmployee/:employeeId", leaveController.getLeavesByEmployeeId);
 router.delete("/deleteLeave/:id", leaveController.deleteLeaveById);
+router.get("/LeavesStatus", leaveController.getAllLeaves);
 
 
 
@@ -112,8 +114,8 @@ router.get("/payslips/:payslipId/download", salaryController.downloadPayslip);
 
 // // Payslip 
 router.get("/getPayslipsByEmpId/:employeeId", payslipController.getPayslipsByEmployee);
-
 router.get("/payslip/:payslipId", payslipController.getPayslipById);
+router.get("/getAll", payslipController.getAllPayslips);
 
 
 
@@ -152,6 +154,7 @@ router.get("/getdocumentsAll", documentController.getAllDocuments);
 router.get("/documentsById/:id", documentController.getDocumentById);
 router.put("/updateDocumentById/:id", documentController.updateDocument);
 router.delete("/deleteDocumentById/:id", documentController.deleteDocument);
+router.get("/employee/:employeeId", documentController.getDocumentsByEmployeeId);
 
 //Ideal
 router.post("/saveIdleTime", idealController.saveIdleTime);
