@@ -76,87 +76,9 @@ exports.addEmployee = async (req, res) => {
     res.status(500).json({ message: "Server Error", error: err.message });
   }
 };
-/**
- * 2️⃣ Increment Salaries (with validation)
- * Accepts raw JSON or x-www-form-urlencoded
- */
-exports.incrementSalaries = async (req, res) => {
-  try {
-    let items = [];
 
-    // Check if JSON array
-    if (Array.isArray(req.body)) {
-      items = req.body;
-    } else if (req.body.employeeIds && req.body.increments) {
-      // x-www-form-urlencoded fallback
-      const employeeIds = req.body.employeeIds.split(",");
-      const increments = req.body.increments.split(",").map(Number);
-      items = employeeIds.map((id, index) => ({
-        employeeId: id.trim(),
-        increment: increments[index] || 0
-      }));
-    } else {
-      return res.status(400).json({ message: "Invalid request body" });
-    }
 
-    // Get all valid employeeIds for reference
-    const allEmployees = await Salary.find({}, "employeeId");
-    const validIds = allEmployees.map(emp => emp.employeeId);
 
-    const results = [];
-
-    for (const item of items) {
-      const { employeeId, increment } = item;
-
-      // Check if employee exists
-      const employee = await Salary.findOne({ employeeId });
-      if (!employee) {
-        results.push({
-          employeeId,
-          success: false,
-          message: "Employee not found",
-          validEmployeeIds: validIds
-        });
-        continue;
-      }
-
-      // Increment base salary
-      employee.baseSalary += increment;
-      await employee.save();
-
-      // Update or create current month payslip
-      const currentMonth = new Date().toLocaleString('default', { month: 'long' });
-      const currentYear = new Date().getFullYear();
-
-      let payslip = await Payslip.findOne({ employeeId: employee._id, month: currentMonth, year: currentYear });
-      if (!payslip) {
-        payslip = await Payslip.create({
-          employeeId: employee._id,
-          month: currentMonth,
-          year: currentYear,
-          amountCredited: employee.baseSalary
-        });
-        employee.payslips.push(payslip._id);
-        await employee.save();
-      } else {
-        payslip.amountCredited = employee.baseSalary;
-        await payslip.save();
-      }
-
-      results.push({
-        employeeId,
-        success: true,
-        newBaseSalary: employee.baseSalary
-      });
-    }
-
-    res.status(200).json({ success: true, results });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server Error" });
-  }
-};
 /**
  * 3️⃣ Download Payslip as PDF
  */
@@ -234,3 +156,101 @@ cron.schedule("1 0 5 * *", async () => {
     console.error("Error generating monthly payslips:", err);
   }
 });
+
+exports.incrementSalaries = async (req, res) => {
+  try {
+    const { employeeId, incrementAmount } = req.body;
+
+    // ✅ Validation
+    if (!employeeId) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee ID is required"
+      });
+    }
+
+    if (!incrementAmount || incrementAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Increment amount must be greater than 0"
+      });
+    }
+
+    // ✅ Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(employeeId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid employee ID"
+      });
+    }
+
+    // ✅ Find Salary (IMPORTANT: use employeeId field, not _id)
+    const salary = await Salary.findOne({ employeeId });
+
+    if (!salary) {
+      return res.status(404).json({
+        success: false,
+        message: "Salary record not found"
+      });
+    }
+
+    // ✅ Store old salary
+    const oldSalary = salary.baseSalary;
+
+    // ✅ Increment
+    salary.baseSalary += incrementAmount;
+
+    // ✅ Month & Year
+    const currentMonth = new Date().toLocaleString("default", {
+      month: "long"
+    });
+    const currentYear = new Date().getFullYear();
+
+    // ✅ Check existing payslip
+    let payslip = await Payslip.findOne({
+      employeeId,
+      month: currentMonth,
+      year: currentYear
+    });
+
+    if (payslip) {
+      // 🔁 Update existing payslip
+      payslip.amountCredited = salary.baseSalary;
+      await payslip.save();
+    } else {
+      // 🆕 Create new payslip
+      payslip = await Payslip.create({
+        employeeId,
+        month: currentMonth,
+        year: currentYear,
+        amountCredited: salary.baseSalary
+      });
+
+      salary.payslips.push(payslip._id);
+    }
+
+    // ✅ Save updated salary
+    await salary.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Salary incremented successfully",
+      data: {
+        employeeId: salary.employeeId,
+        name: salary.name,
+        oldSalary,
+        incrementAmount,
+        newSalary: salary.baseSalary,
+        payslip
+      }
+    });
+
+  } catch (err) {
+    console.error("Increment Salary Error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: err.message
+    });
+  }
+};

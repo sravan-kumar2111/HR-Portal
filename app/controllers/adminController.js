@@ -1,181 +1,88 @@
-// const User = require("../models/user");
-// const Department = require("../models/Department");
-// const Attendance = require("../models/Attendance");
-// const bcrypt = require("bcryptjs");
-// const { v4: uuidv4 } = require("uuid"); // optional, for generating empId
-
-// exports.createHR = async (req, res) => {
-//   try {
-//     const { name, email, departmentId, phone, gender, dateOfBirth, address, designation } = req.body;
-
-//     // 1️⃣ Check required fields
-//     if (!name || !email || !departmentId) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Name, Email and Department are required"
-//       });
-//     }
-
-//     // 2️⃣ Check if email already exists
-//     const existingUser = await User.findOne({ email });
-//     if (existingUser) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "HR already exists with this email"
-//       });
-//     }
-
-//     // 3️⃣ Check if department exists
-//     const department = await Department.findById(departmentId);
-//     if (!department) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Department not found"
-//       });
-//     }
-
-//     // 4️⃣ Generate temporary password
-//     const tempPassword = "Hr@12345";
-//     const hashedPassword = await bcrypt.hash(tempPassword, 10);
-
-//     // 5️⃣ Generate empId
-//     // const empId = "HR-" + uuidv4().slice(0, 8);
-//     const empId = "HRM" + Math.floor(1000 + Math.random() * 9000);
-
-//     // 6️⃣ Create HR
-//     const hr = new User({
-//       name,
-//       empId,
-//       email,
-//       password: hashedPassword,
-//       role: "hr",
-//       department: department._id,
-//       phone,
-//       gender,
-//       dateOfBirth,
-//       address,
-//       designation,
-//       firstLogin: true
-//     });
-
-//     await hr.save();
-
-//     // Optional: increment department employee count for HR as well
-//     await Department.findByIdAndUpdate(department._id, { $inc: { employeeCount: 1 } });
-
-//     res.status(201).json({
-//       success: true,
-//       message: "HR created successfully",
-//       temporaryPassword: tempPassword,
-//       hr
-//     });
-
-//   } catch (error) {
-//     res.status(500).json({
-//       success: false,
-//       message: error.message
-//     });
-//   }
-// };
 const User = require("../models/user");
 const Department = require("../models/Department");
 const Attendance = require("../models/Attendance");
 const bcrypt = require("bcryptjs");
 
+// 🚀 CREATE HR
 exports.createHR = async (req, res) => {
   try {
-    const {
-      name,
-      email,
-      departmentId,
-      phone,
-      gender,
-      dateOfBirth,
-      address,
-      designation,
-      hrId
-    } = req.body;
+    const { name, email, empId, departmentId, phone, gender, designation, dateOfJoining } = req.body;
 
     // 1️⃣ Check required fields
-    if (!name || !email || !departmentId || !hrId) {
+    if (!name || !email || !empId || !departmentId) {
       return res.status(400).json({
         success: false,
-        message: "Name, Email, Department and HR ID are required"
+        message: "Name, Email, EmpId, and DepartmentId are required",
       });
     }
 
-    // 2️⃣ Validate hrId format (3 letters + 4 digits e.g. MCT0001)
-    const hrIdRegex = /^[A-Za-z]{3}\d{4}$/;
-    if (!hrIdRegex.test(hrId)) {
+    // 2️⃣ Validate empId format (3-4 letters + 4 digits)
+    const empIdRegex = /^[A-Z]{3,4}\d{4}$/;
+    if (!empIdRegex.test(empId.toUpperCase())) {
       return res.status(400).json({
         success: false,
-        message: "HR ID must be 3 letters followed by 4 digits (e.g., MCT0001)"
+        message: "Employee ID must be 3-4 letters followed by 4 digits (e.g., HRM1001)",
       });
     }
 
-    // 3️⃣ Check if email already exists
-    const existingUser = await User.findOne({ email });
+    // 3️⃣ Check if email or empId already exists
+    const existingUser = await User.findOne({ $or: [{ email }, { empId: empId.toUpperCase().trim() }] });
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: "HR already exists with this email"
+        message: "Email or Employee ID already exists",
       });
     }
 
-    // 4️⃣ Check if hrId already exists
-    const existingHrId = await User.findOne({ empId: hrId });
-    if (existingHrId) {
-      return res.status(400).json({
-        success: false,
-        message: "HR ID already exists, please use a different one"
-      });
-    }
-
-    // 5️⃣ Check if department exists
+    // 4️⃣ Check if department exists
     const department = await Department.findById(departmentId);
     if (!department) {
       return res.status(404).json({
         success: false,
-        message: "Department not found"
+        message: "Department not found",
       });
     }
 
-    // 6️⃣ Generate temporary password
+    // 5️⃣ Generate temporary password
     const tempPassword = "Hr@12345";
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
-    // 7️⃣ Create HR user
-    const hr = new User({
+    // 6️⃣ Create HR user
+    const hrUser = new User({
       name,
-      empId: hrId,
       email,
+      empId: empId.toUpperCase().trim(),
       password: hashedPassword,
       role: "hr",
       department: department._id,
       phone,
       gender,
-      dateOfBirth,
-      address,
       designation,
-      firstLogin: true
+      dateOfJoining,
+      firstLogin: true,
     });
 
-    await hr.save();
+    await hrUser.save();
 
-    // 8️⃣ Increment department employee count
+    // 7️⃣ Increment department employee count
     await Department.findByIdAndUpdate(department._id, { $inc: { employeeCount: 1 } });
 
+    // 8️⃣ Send response with temporary password
     res.status(201).json({
       success: true,
       message: "HR created successfully",
       temporaryPassword: tempPassword,
-      hr
+      hr: {
+        id: hrUser._id,
+        name: hrUser.name,
+        email: hrUser.email,
+        empId: hrUser.empId,
+        department: hrUser.department,
+        role: hrUser.role,
+      },
     });
-
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    console.error(error);
+    res.status(500).json({ success: false, message: "Server Error", error: error.message });
   }
 };

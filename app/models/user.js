@@ -28,7 +28,7 @@ empId: {
   required: function () {
     return this.role !== "admin";
   },
-   match: [/^[A-Z]{3}\d{4}$/, "Employee ID must be like ABC1234"]
+   match: [/^[A-Z]{4}\d{4}$/, "Employee ID must be like ABC1234"]
 },
 
     email: {

@@ -112,17 +112,30 @@ exports.deleteTask = async (req, res) => {
 // --------------------------
 exports.getTaskCount = async (req, res) => {
   try {
-    // Optional filters via query params
     const { projectId, employeeId } = req.query;
 
     let filter = {};
-    if (projectId) filter.projectId = projectId;
-    if (employeeId) filter.employeeId = employeeId;
 
-    // Fetch tasks
+    // ✅ Validate and filter by projectId
+    if (projectId) {
+      if (!mongoose.Types.ObjectId.isValid(projectId)) {
+        return res.status(400).json({ success: false, message: "Invalid projectId" });
+      }
+      filter.projectId = projectId;
+    }
+
+    // ✅ Validate and filter by employeeId (if passed as MongoDB _id)
+    if (employeeId) {
+      if (!mongoose.Types.ObjectId.isValid(employeeId)) {
+        return res.status(400).json({ success: false, message: "Invalid employeeId" });
+      }
+      filter.employeeId = employeeId;
+    }
+
+    // Fetch tasks with filters applied
     const tasks = await Task.find(filter)
-      .populate("employeeId", "name email department")
-      .populate("projectId", "name department")
+      .populate("employeeId", "name email department") // only relevant fields
+      .populate("projectId", "name department")       // only relevant fields
       .sort({ day: 1, startTime: 1 });
 
     const count = tasks.length;
@@ -145,30 +158,43 @@ exports.getTaskCount = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
-// --------------------------
-// 4. Get all tasks for an employee per day
-// --------------------------
-exports.getTasksByEmployeePerDay = async (req, res) => {
+
+// Get tasks strictly by projectId
+exports.getTasksByProjectId = async (req, res) => {
   try {
-    const { employeeId, date } = req.query;
-    if (!employeeId || !date) return res.status(400).json({ message: "Employee ID and date are required" });
+    const { projectId } = req.query;
 
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
+    if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {
+      return res.status(400).json({ success: false, message: "Invalid or missing projectId" });
+    }
 
-    const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ success: false, message: "Project not found" });
+    }
 
-    const tasks = await Task.find({
-      employeeId,
-      createdAt: { $gte: startOfDay, $lte: endOfDay }
-    })
+    const tasks = await Task.find({ projectId })
+      .populate("employeeId", "name email department")
       .populate("projectId", "name department")
-      .sort({ createdAt: -1 });
+      .sort({ day: 1, startTime: 1 });
 
-    res.status(200).json({ success: true, count: tasks.length, tasks });
+    const count = tasks.length;
+
+    const breakdown = tasks.reduce((acc, task) => {
+      const key = task.progress || "Unknown";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    res.status(200).json({
+      success: true,
+      project: { id: project._id, name: project.name },
+      count,
+      breakdown,
+      tasks
+    });
   } catch (error) {
-    console.error(error);
+    console.error("Error fetching tasks by projectId:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };

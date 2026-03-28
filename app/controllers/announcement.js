@@ -1,4 +1,26 @@
 const Announcement = require("../models/Announcement");
+const mongoose = require("mongoose");
+const Department = require("../models/Department");
+// Helper: Normalize Departments
+// ==============================
+const normalizeDepartments = (departments) => {
+  if (!departments) return [];
+
+  // If string → convert to array
+  if (typeof departments === "string") {
+    return departments
+      .split(",")
+      .map((id) => id.trim())
+      .filter((id) => id);
+  }
+
+  // If already array
+  if (Array.isArray(departments)) {
+    return departments.map((id) => id.toString().trim());
+  }
+
+  return [];
+};
 
 // ==============================
 // 1. CREATE Announcement
@@ -7,8 +29,11 @@ exports.createAnnouncement = async (req, res) => {
   try {
     let { title, message, departments, isForAll } = req.body;
 
-    // Convert isForAll to Boolean
+    // Convert boolean
     isForAll = isForAll === true || isForAll === "true";
+
+    // Normalize departments
+    departments = normalizeDepartments(departments);
 
     // Validation
     if (!title || !message) {
@@ -18,19 +43,35 @@ exports.createAnnouncement = async (req, res) => {
       });
     }
 
-    // Handle departments if provided as string (comma-separated)
-    if (!isForAll) {
-      if (typeof departments === "string") {
-        departments = departments
-          .split(",")
-          .map((d) => d.trim())
-          .filter((d) => d); // remove empty strings
-      }
+    if (!isForAll && departments.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Department IDs are required",
+      });
+    }
 
-      if (!Array.isArray(departments) || departments.length === 0) {
+    // ✅ Validate ObjectIds
+    const validIds = departments.filter((id) =>
+      mongoose.Types.ObjectId.isValid(id)
+    );
+
+    if (!isForAll && validIds.length !== departments.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid department ID format",
+      });
+    }
+
+    // ✅ Check if departments exist
+    if (!isForAll) {
+      const foundDepartments = await Department.find({
+        _id: { $in: validIds },
+      });
+
+      if (foundDepartments.length !== validIds.length) {
         return res.status(400).json({
           success: false,
-          message: "Select at least one department",
+          message: "Some department IDs not found",
         });
       }
     }
@@ -38,7 +79,7 @@ exports.createAnnouncement = async (req, res) => {
     const announcement = new Announcement({
       title,
       message,
-      departments: isForAll ? [] : departments,
+      departments: isForAll ? [] : validIds,
       isForAll,
     });
 
@@ -52,6 +93,7 @@ exports.createAnnouncement = async (req, res) => {
       data: announcement,
     });
   } catch (error) {
+    console.error("CREATE ERROR:", error);
     res.status(500).json({
       success: false,
       message: "Server Error",
@@ -59,28 +101,31 @@ exports.createAnnouncement = async (req, res) => {
     });
   }
 };
+
 // ==============================
 // 2. GET Announcements (Employee)
 // ==============================
 exports.getAnnouncements = async (req, res) => {
   try {
-    const department = req.query.department;
-    // OR: const department = req.user.department;
+    const departmentId = req.query.departmentId;
+    // OR: req.user.departmentId
 
-    if (!department) {
+    if (!departmentId) {
       return res.status(400).json({
         success: false,
-        message: "Department is required",
+        message: "Department ID is required",
       });
     }
 
     const announcements = await Announcement.find({
       isActive: true,
       $or: [
-        { isForAll: true }, // ALL employees
-        { departments: department }, // Specific department
+        { isForAll: true },
+        { departments: departmentId }, // match ObjectId
       ],
-    }).sort({ createdAt: -1 });
+    })
+      .populate("departments", "name") // optional
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -125,10 +170,17 @@ exports.getAllAnnouncements = async (req, res) => {
 // ==============================
 exports.updateAnnouncement = async (req, res) => {
   try {
-    const { id } = req.params; // Announcement ID
+    const { id } = req.params;
     let { title, message, departments, isForAll } = req.body;
 
-    // Find existing announcement
+    // ✅ Validate Announcement ID
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Announcement ID",
+      });
+    }
+
     const announcement = await Announcement.findById(id);
     if (!announcement) {
       return res.status(404).json({
@@ -137,10 +189,23 @@ exports.updateAnnouncement = async (req, res) => {
       });
     }
 
-    // Convert isForAll to Boolean
+    // ✅ Convert boolean
     isForAll = isForAll === true || isForAll === "true";
 
-    // Validate title and message
+    // ✅ Convert departments (IMPORTANT for x-www-form-urlencoded)
+    if (typeof departments === "string") {
+      departments = departments
+        .split(",")
+        .map((id) => id.trim())
+        .filter((id) => id);
+    }
+
+    // Ensure array
+    if (!Array.isArray(departments)) {
+      departments = [];
+    }
+
+    // ✅ Validate title & message
     if (!title || !message) {
       return res.status(400).json({
         success: false,
@@ -148,32 +213,45 @@ exports.updateAnnouncement = async (req, res) => {
       });
     }
 
-    // Normalize departments if isForAll is false
+    // ✅ Validate departments if not for all
+    if (!isForAll && departments.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Department IDs required",
+      });
+    }
+
+    // ✅ Validate ObjectId format
+    const validDeptIds = departments.filter((deptId) =>
+      mongoose.Types.ObjectId.isValid(deptId)
+    );
+
+    if (!isForAll && validDeptIds.length !== departments.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid department ID format",
+      });
+    }
+
+    // ✅ Check if departments exist in DB
     if (!isForAll) {
-      if (typeof departments === "string") {
-        departments = departments
-          .split(",")
-          .map((d) => d.trim())
-          .filter((d) => d);
-      }
+      const existingDepartments = await Department.find({
+        _id: { $in: validDeptIds },
+      });
 
-      if (!Array.isArray(departments)) {
-        departments = [];
-      }
-
-      if (departments.length === 0) {
+      if (existingDepartments.length !== validDeptIds.length) {
         return res.status(400).json({
           success: false,
-          message: "Departments required if not for all",
+          message: "Some department IDs not found",
         });
       }
     }
 
-    // Update announcement fields
+    // ✅ Update fields
     announcement.title = title;
     announcement.message = message;
     announcement.isForAll = isForAll;
-    announcement.departments = isForAll ? [] : departments;
+    announcement.departments = isForAll ? [] : validDeptIds;
 
     await announcement.save();
 
@@ -184,7 +262,9 @@ exports.updateAnnouncement = async (req, res) => {
         : "Announcement updated for selected departments",
       data: announcement,
     });
+
   } catch (error) {
+    console.error("UPDATE ERROR:", error);
     res.status(500).json({
       success: false,
       message: "Server Error",

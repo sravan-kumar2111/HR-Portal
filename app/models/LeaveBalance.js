@@ -24,10 +24,14 @@ const leaveBalanceSchema = new mongoose.Schema({
     default:0
   },
 
-  year:{
-    type:Number,
-    default:new Date().getFullYear()
-  }
+  // year:{
+  //   type:Number,
+  //   default:new Date().getFullYear()
+  // }
+  year: {
+  type: Number,
+  default: new Date().getFullYear(),
+}
 
 },{timestamps:true});
 

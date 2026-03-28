@@ -1,62 +1,9 @@
 const User = require("../models/user");
 const bcrypt = require("bcryptjs");
 const Department = require("../models/Department");
-// exports.createEmployee = async (req, res) => {
-
-//   try {
-
-//     const { name, email, department, designation, empId, phone, gender, dateOfBirth, dateOfJoining, address } = req.body;
-
-//     // Check duplicate email
-//     const existingEmployee = await User.findOne({ email });
-
-//     if (existingEmployee) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Employee already exists with this email"
-//       });
-//     }
-
-//     const tempPassword = "Emp@12345";
-
-//     const hashedPassword = await bcrypt.hash(tempPassword, 10);
-
-//     const employee = new User({
-//       name,
-//       empId,
-//       email,
-//       password: hashedPassword,
-//       role: "employee",
-//       department,
-//       designation,
-//       empId, 
-//       phone,
-//       gender,
-//       dateOfBirth,
-//       dateOfJoining,
-//       address,
-//       firstLogin: true
-//     });
-
-//     await employee.save();
-
-//     res.status(201).json({
-//       success: true,
-//       message: "Employee created successfully",
-//       temporaryPassword: tempPassword
-//     });
-
-//   } catch (error) {
-
-//     res.status(500).json({
-//       success: false,
-//       message: error.message
-//     });
-
-//   }
-
-// };
-
+/////////////////////////
+// CREATE EMPLOYEE
+/////////////////////////
 exports.createEmployee = async (req, res) => {
   try {
     const { name, email, departmentId, designation, empId, phone, gender, dateOfBirth, dateOfJoining, address } = req.body;

@@ -17,8 +17,11 @@ const announcementController = require("../controllers/announcement");
 const { createDefaultAdmin } = require("../../utils/createAdmin");
 const { authorizeRoles } = require("../middlewares/role");
 const documentController = require("../controllers/document");
-const idealController = require("../controllers/ideal");
+const idealController = require("../controllers/idle");
+const leaveBalanceController = require("../controllers/leaveBalance");
 const upload = require("../middlewares/upload"); 
+const holidayController = require("../controllers/holiday");
+
 
 
 
@@ -69,13 +72,12 @@ router.get("/getLeavesByEmployee/:employeeId", leaveController.getLeavesByEmploy
 router.delete("/deleteLeave/:id", leaveController.deleteLeaveById);
 router.get("/LeavesStatus", leaveController.getAllLeaves);
 
+//leaveBalance
+
+router.post("/leaveBalance", leaveBalanceController.getEmployeeLeaveBalance);
+router.get("/balance/:employeeId", leaveBalanceController.getEmployeeLeaveBalanceGET);
 
 
-const holidayController = require("../controllers/holiday");
-
-// Route to generate weekends for a year
-// Example: POST /holidays/generate/2026
-// router.post("/generate/:year", holidayController.generateWeekends);
 
 // Route to get all holidays
 // Example: GET /holidays
@@ -99,15 +101,15 @@ router.delete("/deleteProject/:id", projectController.deleteProject);
 //tasks
 router.post("/create-task", taskController.addTask);
 router.put("/update-progress", taskController.updateTaskProgress);
-router.get("/getprojectsById/:projectId", taskController.getTaskCount);//Manager view: tasks by project
-router.get("/employee-day", taskController.getTasksByEmployeePerDay);// Employee view: tasks per day
+router.get("/getTasksById/:projectId", taskController.getTaskCount);//Manager view: tasks by project
+//router.get("/tasksByEmployeePerDay", taskController.getTasksByEmployeePerDay);// Employee view: tasks per day
 router.delete("/delete/:taskId", taskController.deleteTask);
-
+router.get("/project", taskController.getTasksByProjectId);
 
 
 // Add employee with base salary
 router.post("/add-employee", salaryController.addEmployee);
-router.put("/increment-salaries", salaryController.incrementSalaries);
+router.post("/increment-salaries", salaryController.incrementSalaries);
 router.get("/payslips/:payslipId/download", salaryController.downloadPayslip);
 
 
@@ -149,7 +151,7 @@ router.post(
   upload.array("files", 10),
   documentController.uploadDocument
 );
-router.get('/:id/download', documentController.downloadDocument);
+router.get('/document/:id/download', documentController.downloadDocument);
 router.get("/getdocumentsAll", documentController.getAllDocuments);
 router.get("/documentsById/:id", documentController.getDocumentById);
 router.put("/updateDocumentById/:id", documentController.updateDocument);
@@ -157,8 +159,11 @@ router.delete("/deleteDocumentById/:id", documentController.deleteDocument);
 router.get("/employee/:employeeId", documentController.getDocumentsByEmployeeId);
 
 //Ideal
-router.post("/saveIdleTime", idealController.saveIdleTime);
-router.get("/idleTimeByEmployee/:employeeId", idealController.getIdleTimeByEmployee);
+router.post("/startIdleTime", idealController.startIdle);
+router.post("/endIdleTime", idealController.endIdle);
+router.post("/update-Activity", idealController.updateActivity);
+router.get("/getIdleLogs/:employeeId", idealController.getIdleByEmployee);
+router.get("/idle/:idleId", idealController.getIdleById);
 
 
 
