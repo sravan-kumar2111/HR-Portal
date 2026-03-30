@@ -198,3 +198,28 @@ exports.getTasksByProjectId = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+// --------------------------
+// Get a single task by ID
+// --------------------------
+exports.getTaskById = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+
+    if (!taskId || !mongoose.Types.ObjectId.isValid(taskId)) {
+      return res.status(400).json({ success: false, message: "Invalid or missing taskId" });
+    }
+
+    const task = await Task.findById(taskId)
+      .populate("employeeId", "name email department") // include relevant employee fields
+      .populate("projectId", "name department");      // include relevant project fields
+
+    if (!task) {
+      return res.status(404).json({ success: false, message: "Task not found" });
+    }
+
+    res.status(200).json({ success: true, task });
+  } catch (error) {
+    console.error("Error fetching task by ID:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};

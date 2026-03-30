@@ -105,7 +105,7 @@ router.get("/getTasksById/:projectId", taskController.getTaskCount);//Manager vi
 //router.get("/tasksByEmployeePerDay", taskController.getTasksByEmployeePerDay);// Employee view: tasks per day
 router.delete("/delete/:taskId", taskController.deleteTask);
 router.get("/project", taskController.getTasksByProjectId);
-
+router.get("/gettaskById/:taskId", taskController.getTaskById);
 
 // Add employee with base salary
 router.post("/add-employee", salaryController.addEmployee);
