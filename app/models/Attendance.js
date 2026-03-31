@@ -12,6 +12,24 @@ const breakSchema = new mongoose.Schema({
   end: { type: Date }
 });
 
+// Idle tracking
+const idleSchema = new mongoose.Schema({
+  start: { type: Date, required: true },
+  end: { type: Date },
+  reason: {
+    type: String,
+    trim: true,
+    enum: [
+      "Break",
+      "Washroom",
+      "Drinking Water",
+      "Meeting",
+      "Doubts",
+      "Others"
+    ]
+  }
+});
+
 // Main Attendance
 const attendanceSchema = new mongoose.Schema({
   employeeId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -22,9 +40,11 @@ const attendanceSchema = new mongoose.Schema({
 
   sessions: [sessionSchema],
   breaks: [breakSchema],
+  idles: [idleSchema],
 
   totalWorkHours: { type: Number, default: 0 },
   breakHours: { type: Number, default: 0 },
+  idleHours: { type: Number, default: 0 },
   overtimeHours: { type: Number, default: 0 },
 
   // status: { type: String, enum: ["Present", "Half Day", "Absent"], default: "Present" }

@@ -63,7 +63,7 @@ const cors = require("cors");
 require("dotenv").config();
 
 const createAdmin = require("./utils/createAdmin");
-const autoIdle = require("./utils/autoIdle.js");
+//const autoIdleTracker = require("./utils/autoIdle.js");
 
 const app = express();
 

@@ -44,37 +44,6 @@ exports.uploadDocument = async (req, res) => {
   }
 };
 
-// Download document
-// exports.downloadDocument = async (req, res) => {
-//   try {
-//     const doc = await Document.findById(req.params.id);
-//     if (!doc) return res.status(404).json({ success: false, message: "Document not found in DB" });
-
-//     const filePath = path.join(__dirname, '..', doc.filePath);
-//     if (!fs.existsSync(filePath)) {
-//       return res.status(404).json({ success: false, message: `File not found on server: ${filePath}` });
-//     }
-
-//     res.download(filePath, doc.originalName);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ success: false, message: "Server error" });
-//   }
-// };
-
-// // Optional: Fix old documents
-// exports.fixOldDocumentPaths = async () => {
-//   const docs = await Document.find({});
-//   for (let doc of docs) {
-//     const filename = path.basename(doc.filePath); // just filename
-//     const correctPath = path.join('uploads', filename);
-//     if (doc.filePath !== correctPath) {
-//       doc.filePath = correctPath;
-//       await doc.save();
-//       console.log(`Fixed path for doc: ${doc._id}`);
-//     }
-//   }
-// };
 exports.downloadDocument = async (req, res) => {
   try {
     const doc = await Document.findById(req.params.id);

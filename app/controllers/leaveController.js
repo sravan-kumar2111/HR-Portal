@@ -222,23 +222,6 @@ exports.updateLeaveStatus = async (req, res) => {
 
 };
 ///////////getLeaveById////////
-// exports.getLeaveById = async(req,res)=>{
-
-// try{
-
-// const leave = await Leave.findById(req.params.id);
-
-// res.json(leave);
-
-// }catch(err){
-
-// res.status(500).json({
-// message:err.message
-// });
-
-// }
-
-// };
 exports.getLeaveById = async (req, res) => {
 
   try {

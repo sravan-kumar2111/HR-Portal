@@ -17,7 +17,7 @@ const announcementController = require("../controllers/announcement");
 const { createDefaultAdmin } = require("../../utils/createAdmin");
 const { authorizeRoles } = require("../middlewares/role");
 const documentController = require("../controllers/document");
-const idealController = require("../controllers/idle");
+// const idealController = require("../controllers/idle");
 const leaveBalanceController = require("../controllers/leaveBalance");
 const upload = require("../middlewares/upload"); 
 const holidayController = require("../controllers/holiday");
@@ -52,12 +52,17 @@ router.delete("/delete-employee/:id", hrController.deleteEmployee);
 router.post("/logout", attendanceController.logoutSession);
 router.post("/break-start", attendanceController.startBreak);
 router.post("/breakend", attendanceController.endBreak);
+router.post("/startIdleTime", attendanceController.startIdle);
+router.post("/endIdleTime", attendanceController.endIdle);
+router.get("/getIdleLogs/:employeeId", attendanceController.getIdleLogs);
 router.get("/live-hours", attendanceController.getLiveHours);
 router.get("/getAllAttendance", attendanceController.getAllAttendance);
 router.get("/getAttendanceById/:id", attendanceController.getAttendanceById);
 router.delete("/deleteAttendanceById/:id", attendanceController.deleteAttendance);
 router.post("/hr-update", attendanceController.hrUpdateAttendance);
 router.get("/getAttendanceByemployee/:employeeId", attendanceController.getAttendanceByEmployeeId);
+router.get("/idle/:id", attendanceController.getIdleById);
+
 
 
 
@@ -159,12 +164,11 @@ router.delete("/deleteDocumentById/:id", documentController.deleteDocument);
 router.get("/employee/:employeeId", documentController.getDocumentsByEmployeeId);
 
 //Ideal
-router.post("/startIdleTime", idealController.startIdle);
-router.post("/endIdleTime", idealController.endIdle);
-router.post("/update-Activity", idealController.updateActivity);
-router.get("/getIdleLogs/:employeeId", idealController.getIdleByEmployee);
-router.get("/idle/:idleId", idealController.getIdleById);
-
+// router.post("/startIdleTime", idealController.startIdle);
+// router.post("/endIdleTime", idealController.endIdle);
+// router.post("/update-Activity", idealController.updateActivity);
+// router.get("/getIdleLogs/:employeeId", idealController.getIdleByEmployee);
+// 
 
 
 
