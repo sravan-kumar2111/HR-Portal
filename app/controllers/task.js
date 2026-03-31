@@ -8,10 +8,10 @@ const Employee = require("../models/user");
 // --------------------------
 exports.addTask = async (req, res) => {
   try {
-    const { projectId, employeeId, description, startTime, endTime, day } = req.body;
+    const { projectId, employeeId, description, startTime, day } = req.body;
 
     // Basic fields validation
-    if (!projectId || !employeeId || !description || !startTime || !endTime || !day) {
+    if (!projectId || !employeeId || !description || !startTime  || !day) {
       return res.status(400).json({ message: "All fields are required!" });
     }
 
@@ -41,7 +41,7 @@ exports.addTask = async (req, res) => {
       employeeId,
       description,
       startTime: new Date(startTime),
-      endTime: new Date(endTime),
+      // endTime: new Date(endTime),
       day: new Date(day),
     });
 
@@ -55,35 +55,155 @@ exports.addTask = async (req, res) => {
 // --------------------------
 // 2. Employee updates task progress
 // --------------------------
+// exports.updateTaskProgress = async (req, res) => {
+//   try {
+//     const { taskId, progress, reason} = req.body;
+
+//     if (!taskId || !progress) {
+//       return res.status(400).json({ message: "Task ID and progress are required" });
+//     }
+
+//     const task = await Task.findById(taskId);
+//     if (!task) return res.status(404).json({ message: "Task not found" });
+
+//     task.progress = progress;
+
+//     // Reason required only if Not Completed / Pending
+//     if ((progress === "Not Completed" || progress === "Pending") && !reason) {
+//       return res.status(400).json({ message: "Reason is required for Not Completed or Pending tasks" });
+//     }
+
+//     if (reason) task.reason = reason;
+//     task.updatedAt = new Date();
+
+//     await task.save();
+//     res.status(200).json({ success: true, message: "Task progress updated", task });
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ success: false, message: "Server error" });
+//   }
+// };
 exports.updateTaskProgress = async (req, res) => {
   try {
-    const { taskId, progress, reason } = req.body;
+    const { taskId, progress, reason, endTime } = req.body;
 
+    // ✅ Basic validation
     if (!taskId || !progress) {
-      return res.status(400).json({ message: "Task ID and progress are required" });
+      return res.status(400).json({
+        success: false,
+        message: "Task ID and progress are required"
+      });
     }
 
+    // ✅ Find task
     const task = await Task.findById(taskId);
-    if (!task) return res.status(404).json({ message: "Task not found" });
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found"
+      });
+    }
 
+    // ✅ Update progress
     task.progress = progress;
 
-    // Reason required only if Not Completed / Pending
-    if ((progress === "Not Completed" || progress === "Pending") && !reason) {
-      return res.status(400).json({ message: "Reason is required for Not Completed or Pending tasks" });
+    // ===============================
+    // 🔶 CASE 1: Pending / Not Completed
+    // ===============================
+    if (progress === "Pending" || progress === "Not Completed") {
+      
+      // 🔴 Reason required
+      if (!reason) {
+        return res.status(400).json({
+          success: false,
+          message: "Reason is required for Pending / Not Completed tasks"
+        });
+      }
+
+      // 🔴 End time required
+      if (!endTime) {
+        return res.status(400).json({
+          success: false,
+          message: "End time is required for Pending / Not Completed tasks"
+        });
+      }
+
+      const manualEndTime = new Date(endTime);
+
+      // 🔴 Validate date
+      if (isNaN(manualEndTime)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid end time format"
+        });
+      }
+
+      // 🔴 End time should not be before start time
+      if (task.startTime && manualEndTime < task.startTime) {
+        return res.status(400).json({
+          success: false,
+          message: "End time cannot be before start time"
+        });
+      }
+
+      // ✅ Save values
+      task.reason = reason;
+      task.endTime = manualEndTime;
     }
 
-    if (reason) task.reason = reason;
+    // ===============================
+    // 🔶 CASE 2: Completed
+    // ===============================
+    else if (progress === "Completed") {
+      
+      // ✅ Set endTime only once
+      if (!task.endTime) {
+        task.endTime = new Date();
+      }
+
+      // ✅ Clear reason (optional)
+      task.reason = null;
+    }
+
+    // ===============================
+    // 🔶 OPTIONAL: OTHER STATUS
+    // ===============================
+    else {
+      // Reset values if needed
+      task.reason = null;
+      task.endTime = null;
+    }
+
+    // ===============================
+    // ⏱️ Duration Calculation
+    // ===============================
+    if (task.startTime && task.endTime) {
+      task.duration = Math.round(
+        (task.endTime - task.startTime) / (1000 * 60) // minutes
+      );
+    }
+
+    // ✅ Update timestamp
     task.updatedAt = new Date();
 
+    // ✅ Save task
     await task.save();
-    res.status(200).json({ success: true, message: "Task progress updated", task });
+
+    return res.status(200).json({
+      success: true,
+      message: "Task progress updated successfully",
+      task
+    });
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("Update Task Progress Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
   }
 };
-
 // --------------------------
 // 5. Delete a task
 // --------------------------
