@@ -52,57 +52,6 @@ const closeActiveBreaksAndIdles = (attendance, endTime = new Date()) => {
     }
   }
 };
-
-// // ---------------------------
-// // Logout Session
-// // ---------------------------
-// exports.logoutSession = async (req, res) => {
-//   try {
-
-//     console.log("BODY DATA:", req.body);
-
-//     const userId = req.body?.employeeId;
-
-//     if (!userId) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "employeeId required"
-//       });
-//     }
-
-//     const objectId = new mongoose.Types.ObjectId(userId);
-
-//     const today = new Date().toISOString().split("T")[0];
-
-//     const attendance = await Attendance.findOne({
-//       employeeId: objectId,
-//       date: today
-//     });
-
-//     if (!attendance) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Attendance not found"
-//       });
-//     }
-
-//     attendance.lastLogout = new Date();
-
-//     await calculateWorkHours(attendance);
-
-//     await attendance.save();
-
-//     res.json({
-//       success: true,
-//       message: "Logout recorded",
-//       totalWorkHours: attendance.totalWorkHours,
-//       status: attendance.status
-//     });
-
-//   } catch (err) {
-//     res.status(500).json({ message: err.message });
-//   }
-// };
 // ---------------------------
 // Logout Session
 // ---------------------------
