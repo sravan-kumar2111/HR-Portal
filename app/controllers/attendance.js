@@ -4,874 +4,417 @@ const mongoose = require("mongoose");
 const cron = require("node-cron");
 const moment = require("moment-timezone");
 
-const IST_TIMEZONE = "Asia/Kolkata";
+const IST = "Asia/Kolkata";
 
-const getISTNow = () =>
-  new Date(new Date().toLocaleString("en-US", { timeZone: IST_TIMEZONE }));
+// =======================
+// TIME HELPERS (IST ONLY)
+// =======================
+const getNowIST = () => moment().tz(IST).toDate();
 
-const getISTDateString = () =>
-  new Date().toLocaleDateString("en-CA", { timeZone: IST_TIMEZONE });
+const toIST = (date) =>
+  moment(date).tz(IST).format("YYYY-MM-DD hh:mm A");
 
-const getISTDayRange = () => {
-  const now = getISTNow();
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(now);
-  end.setHours(23, 59, 59, 999);
-  return { start, end };
-};
+const getTodayIST = () =>
+  moment().tz(IST).format("YYYY-MM-DD");
 
-const ALLOWED_IDLE_REASONS = [
-  "Break",
-  "Washroom",
-  "Drinking Water",
-  "Meeting",
-  "Doubts",
-  "Others"
-];
+// =======================
+// COMMON HELPERS
+// =======================
+const getDurationMs = (start, end = getNowIST()) =>
+  start ? new Date(end) - new Date(start) : 0;
 
-const getDurationMs = (start, end = new Date()) => {
-  if (!start) return 0;
-  return new Date(end) - new Date(start);
-};
+const findTodayAttendance = async (employeeId) =>
+  Attendance.findOne({
+    employeeId,
+    date: getTodayIST(),
+  });
 
-const closeActiveBreaksAndIdles = (attendance, endTime = new Date()) => {
-  if (attendance.breaks && attendance.breaks.length > 0) {
-    const activeBreak = attendance.breaks.find((b) => b.start && !b.end);
-    if (activeBreak) {
-      activeBreak.end = endTime;
+const closeActiveBreaksAndIdles = (attendance, endTime) => {
+  attendance.breaks?.forEach(b => {
+    if (b.start && !b.end) b.end = endTime;
+  });
+
+  attendance.idles?.forEach(i => {
+    if (i.start && !i.end) {
+      i.end = endTime;
+      if (!i.reason) i.reason = "Others";
     }
-  }
-
-  if (attendance.idles && attendance.idles.length > 0) {
-    const activeIdle = attendance.idles.find((idle) => idle.start && !idle.end);
-    if (activeIdle) {
-      activeIdle.end = endTime;
-      if (!activeIdle.reason) {
-        activeIdle.reason = "Others";
-      }
-    }
-  }
+  });
 };
-// ---------------------------
-// Logout Session
-// ---------------------------
 
-
-exports.logoutSession = async (req, res) => {
+// =======================
+// LOGIN (MISSING API)
+// =======================
+exports.loginSession = async (req, res) => {
   try {
-    const userId = req.body?.employeeId;
+    const { employeeId } = req.body;
 
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "employeeId required",
-      });
-    }
+    if (!employeeId)
+      return res.status(400).json({ message: "employeeId required" });
 
-    const objectId = new mongoose.Types.ObjectId(userId);
+    const objectId = new mongoose.Types.ObjectId(employeeId);
+    const today = getTodayIST();
 
-    // ✅ UTC time (store in DB)
-    const nowUTC = new Date();
-
-    // ✅ IST for finding today's attendance
-    const nowIST = moment().tz("Asia/Kolkata");
-    const todayStr = nowIST.format("YYYY-MM-DD");
-
-    // 🔍 Find attendance
-    const attendance = await Attendance.findOne({
-      employeeId: objectId,
-      date: todayStr,
-    });
-
-    if (!attendance) {
-      return res.status(404).json({
-        success: false,
-        message: "Attendance not found",
-      });
-    }
-
-    // 👉 Get last session
-    const lastSession =
-      attendance.sessions[attendance.sessions.length - 1];
-
-    if (!lastSession || lastSession.logoutTime) {
-      return res.status(400).json({
-        success: false,
-        message: "No active session found",
-      });
-    }
-
-    // ✅ Store logout time (UTC)
-    lastSession.logoutTime = nowUTC;
-
-    // 👉 Save last logout (for UI)
-    attendance.lastLogout = nowUTC;
-
-    // 👉 Close breaks / idle
-    if (typeof closeActiveBreaksAndIdles === "function") {
-      closeActiveBreaksAndIdles(attendance, nowUTC);
-    }
-
-    // 👉 Calculate work hours
-    if (typeof calculateWorkHours === "function") {
-      await calculateWorkHours(attendance, false);
-    }
-
-    await attendance.save();
-
-    // ✅ Convert logout time to IST for response
-    const logoutTimeIST = moment(attendance.lastLogout)
-      .tz("Asia/Kolkata")
-      .format("YYYY-MM-DD hh:mm A");
-
-    res.json({
-      success: true,
-      message: "Logout recorded",
-      totalWorkHours: attendance.totalWorkHours,
-      status: attendance.status,
-
-      // ✅ Send IST time to frontend
-      logoutTime: logoutTimeIST,
-    });
-
-  } catch (err) {
-    console.error("Logout Error:", err);
-    res.status(500).json({
-      success: false,
-      message: err.message,
-    });
-  }
-};
-// ---------------------------
-// Start Break
-// ---------------------------
-exports.startBreak = async (req, res) => {
-  try {
-
-    console.log("BODY DATA:", req.body);
-
-    const userId = req.body?.employeeId;
-
-    if (!userId) {
-      return res.status(400).json({
-        success:false,
-        message:"employeeId required"
-      });
-    }
-
-    const objectId = new mongoose.Types.ObjectId(userId);
-
-    const today = new Date().toISOString().split("T")[0];
-
-    const attendance = await Attendance.findOne({
+    let attendance = await Attendance.findOne({
       employeeId: objectId,
       date: today
     });
 
+    const now = getNowIST();
+
     if (!attendance) {
-      return res.status(404).json({
-        success:false,
-        message:"Attendance not found"
+      attendance = await Attendance.create({
+        employeeId: objectId,
+        date: today,
+        sessions: [{ loginTime: now }],
+        firstLogin: now,
       });
+    } else {
+      attendance.sessions.push({ loginTime: now });
     }
-
-    const lastBreak = attendance.breaks[attendance.breaks.length - 1];
-
-    if (lastBreak && !lastBreak.end) {
-      return res.status(400).json({
-        success:false,
-        message:"Break already started"
-      });
-    }
-
-    attendance.breaks.push({
-      start: new Date()
-    });
 
     await attendance.save();
 
     res.json({
-      success:true,
-      message:"Break started"
+      success: true,
+      loginTime: toIST(now)
     });
 
-  } catch(err){
-    res.status(500).json({message:err.message});
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };
-////////////////////////////////////////////////////
-// exports.startIdle = async (req, res) => {
-//   try {
-//     const userId = req.body?.employeeId;
 
-//     if (!userId) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "employeeId required"
-//       });
-//     }
+// =======================
+// LOGOUT
+// =======================
+exports.logoutSession = async (req, res) => {
+  try {
+    const { employeeId } = req.body;
 
-//     const objectId = new mongoose.Types.ObjectId(userId);
-//     const attendance = await findTodayAttendance(objectId);
+    const attendance = await findTodayAttendance(
+      new mongoose.Types.ObjectId(employeeId)
+    );
 
-//     if (!attendance) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Attendance not found"
-//       });
-//     }
+    if (!attendance)
+      return res.status(404).json({ message: "Attendance not found" });
 
-//     const lastIdle = attendance.idles?.at(-1);
+    const last = attendance.sessions.at(-1);
 
-//     if (lastIdle && !lastIdle.end) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Idle already started"
-//       });
-//     }
+    if (!last || last.logoutTime)
+      return res.status(400).json({ message: "No active session" });
 
-//     attendance.idles.push({ start: new Date() });
-//     await attendance.save();
+    const now = getNowIST();
 
-//     const createdIdle = attendance.idles.at(-1);
+    last.logoutTime = now;
+    attendance.lastLogout = now;
 
-//     res.json({
-//       success: true,
-//       message: "Idle started",
-//       idleId: createdIdle._id   // ⭐ REQUIRED for Electron
-//     });
+    closeActiveBreaksAndIdles(attendance, now);
 
-//   } catch (err) {
-//     res.status(500).json({ message: err.message });
-//   }
-// };
+    calculateWorkHours(attendance, false);
+
+    await attendance.save();
+
+    res.json({
+      success: true,
+      logoutTime: toIST(now),
+      totalWorkHours: attendance.totalWorkHours,
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// =======================
+// BREAK
+// =======================
+exports.startBreak = async (req, res) => {
+  try {
+    const { employeeId } = req.body;
+
+    const attendance = await findTodayAttendance(
+      new mongoose.Types.ObjectId(employeeId)
+    );
+
+    if (!attendance)
+      return res.status(404).json({ message: "Attendance not found" });
+
+    const last = attendance.breaks.at(-1);
+
+    if (last && !last.end)
+      return res.status(400).json({ message: "Break already started" });
+
+    attendance.breaks.push({ start: getNowIST() });
+
+    await attendance.save();
+
+    res.json({ success: true });
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.endBreak = async (req, res) => {
+  try {
+    const { employeeId } = req.body;
+
+    const attendance = await findTodayAttendance(
+      new mongoose.Types.ObjectId(employeeId)
+    );
+
+    const last = attendance.breaks.at(-1);
+
+    if (!last || last.end)
+      return res.status(400).json({ message: "No active break" });
+
+    last.end = getNowIST();
+
+    await attendance.save();
+
+    res.json({ success: true });
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// =======================
+// IDLE
+// =======================
+const ALLOWED_IDLE_REASONS = [
+  "Break", "Washroom", "Drinking Water",
+  "Meeting", "Doubts", "Others"
+];
+
 exports.startIdle = async (req, res) => {
   try {
-    const userId = req.body?.employeeId;
+    const { employeeId } = req.body;
 
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "employeeId required"
-      });
-    }
+    const attendance = await findTodayAttendance(
+      new mongoose.Types.ObjectId(employeeId)
+    );
 
-    const objectId = new mongoose.Types.ObjectId(userId);
-    const attendance = await findTodayAttendance(objectId);
+    const last = attendance.idles.at(-1);
 
-    if (!attendance) {
-      return res.status(404).json({
-        success: false,
-        message: "Attendance not found"
-      });
-    }
+    if (last && !last.end)
+      return res.status(400).json({ message: "Idle already started" });
 
-    const lastIdle = attendance.idles?.at(-1);
+    attendance.idles.push({ start: getNowIST() });
 
-    if (lastIdle && !lastIdle.end) {
-      return res.status(400).json({
-        success: false,
-        message: "Idle already started"
-      });
-    }
-
-    attendance.idles.push({ start: new Date() });
     await attendance.save();
 
     const createdIdle = attendance.idles.at(-1);
 
     res.json({
       success: true,
-      message: "Idle started",
-      idleId: createdIdle._id   // ⭐ REQUIRED for Electron
+      idleId: createdIdle._id
     });
 
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
-// ---------------------------
-// End Break
-// ---------------------------
-exports.endBreak = async (req, res) => {
+
+exports.endIdle = async (req, res) => {
   try {
+    const { employeeId, reason } = req.body;
 
-    console.log("BODY DATA:", req.body);
+    if (!ALLOWED_IDLE_REASONS.includes(reason))
+      return res.status(400).json({ message: "Invalid reason" });
 
-    const userId = req.body?.employeeId;
+    const attendance = await findTodayAttendance(
+      new mongoose.Types.ObjectId(employeeId)
+    );
 
-    if (!userId) {
-      return res.status(400).json({
-        success:false,
-        message:"employeeId required"
-      });
-    }
+    const last = attendance.idles.at(-1);
 
-    const objectId = new mongoose.Types.ObjectId(userId);
+    if (!last || last.end)
+      return res.status(400).json({ message: "No active idle" });
 
-    const today = new Date().toISOString().split("T")[0];
+    last.end = getNowIST();
+    last.reason = reason;
 
-    const attendance = await Attendance.findOne({
-      employeeId: objectId,
-      date: today
-    });
-
-    if (!attendance || attendance.breaks.length === 0) {
-      return res.status(404).json({
-        success:false,
-        message:"No break found"
-      });
-    }
-
-    const lastBreak = attendance.breaks[attendance.breaks.length - 1];
-
-    lastBreak.end = new Date();
+    calculateWorkHours(attendance, false);
 
     await attendance.save();
 
     res.json({
-      success:true,
-      message:"Break ended"
+      success: true,
+      idleHours: attendance.idleHours,
     });
 
-  } catch(err){
-    res.status(500).json({message:err.message});
-  }
-};
-
-const findTodayAttendance = async (employeeId) => {
-  return Attendance.findOne({
-    employeeId,
-    date: getISTDateString()
-  });
-};
-
-exports.startIdle = async (req, res) => {
-  try {
-    const userId = req.body?.employeeId;
-    if (!userId) {
-      return res.status(400).json({ success: false, message: "employeeId required" });
-    }
-
-    const objectId = new mongoose.Types.ObjectId(userId);
-    const attendance = await findTodayAttendance(objectId);
-    if (!attendance) {
-      return res.status(404).json({ success: false, message: "Attendance not found" });
-    }
-
-    const lastIdle = attendance.idles && attendance.idles.length > 0
-      ? attendance.idles[attendance.idles.length - 1]
-      : null;
-
-    if (lastIdle && !lastIdle.end) {
-      return res.status(400).json({ success: false, message: "Idle already started" });
-    }
-
-    attendance.idles.push({ start: new Date() });
-    await attendance.save();
-
-    return res.json({ success: true, message: "Idle started" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
-///////////////////////////////////////////
-exports.endIdle = async (req, res) => {
+
+// =======================
+// LIVE HOURS
+// =======================
+exports.getLiveHours = async (req, res) => {
   try {
-    const userId = req.body?.employeeId;
-    const reason = req.body?.reason;
+    const { employeeId } = req.query;
 
-    if (!userId) {
-      return res.status(400).json({ success: false, message: "employeeId required" });
-    }
+    const attendance = await findTodayAttendance(
+      new mongoose.Types.ObjectId(employeeId)
+    );
 
-    if (!reason || !ALLOWED_IDLE_REASONS.includes(reason)) {
-      return res.status(400).json({
-        success: false,
-        message: `Idle reason must be one of: ${ALLOWED_IDLE_REASONS.join(", ")}`
-      });
-    }
-
-    const objectId = new mongoose.Types.ObjectId(userId);
-    const attendance = await findTodayAttendance(objectId);
-    if (!attendance) {
-      return res.status(404).json({ success: false, message: "Attendance not found" });
-    }
-
-    const lastIdle = attendance.idles && attendance.idles.length > 0
-      ? attendance.idles[attendance.idles.length - 1]
-      : null;
-
-    if (!lastIdle || lastIdle.end) {
-      return res.status(400).json({ success: false, message: "No active idle session found" });
-    }
-
-    lastIdle.end = new Date();
-    lastIdle.reason = reason;
+    if (!attendance)
+      return res.json({ hours: 0, breakHours: 0, idleHours: 0 });
 
     calculateWorkHours(attendance, false);
-    await attendance.save();
 
-    res.json({ success: true, message: "Idle ended", idle: lastIdle, idleHours: attendance.idleHours });
+    res.json({
+      hours: attendance.totalWorkHours,
+      breakHours: attendance.breakHours,
+      idleHours: attendance.idleHours,
+    });
+
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
-////////////////////////////////////////////////
-// exports.endIdle = async (req, res) => {
-//   try {
-//     const { employeeId, idleId, reason } = req.body;
 
-//     if (!employeeId || !idleId) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "employeeId and idleId required"
-//       });
-//     }
-
-//     if (!reason || !ALLOWED_IDLE_REASONS.includes(reason)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: `Idle reason must be one of: ${ALLOWED_IDLE_REASONS.join(", ")}`
-//       });
-//     }
-
-//     const objectId = new mongoose.Types.ObjectId(employeeId);
-//     const attendance = await findTodayAttendance(objectId);
-
-//     if (!attendance) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Attendance not found"
-//       });
-//     }
-
-//     // ✅ Find exact idle
-//     const idle = attendance.idles.id(idleId);
-
-//     if (!idle || idle.end) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Invalid or already ended idle"
-//       });
-//     }
-
-//     idle.end = new Date();
-//     idle.reason = reason;
-
-//     calculateWorkHours(attendance, false);
-//     await attendance.save();
-
-//     res.json({
-//       success: true,
-//       message: "Idle ended",
-//       idle,
-//       idleHours: attendance.idleHours
-//     });
-
-//   } catch (err) {
-//     res.status(500).json({ message: err.message });
-//   }
-// };
-
-
-///////////////////////////////
+// =======================
+// IDLE LOGS
+// =======================
 exports.getIdleLogs = async (req, res) => {
   try {
-    const employeeId = req.params.employeeId;
-    if (!employeeId) {
-      return res.status(400).json({ success: false, message: "employeeId is required" });
-    }
+    const objectId = new mongoose.Types.ObjectId(req.params.employeeId);
 
-    const objectId = new mongoose.Types.ObjectId(employeeId);
-    const attendances = await Attendance.find({ employeeId: objectId }).sort({ date: -1 });
-    const idleLogs = attendances.flatMap((attendance) =>
-      (attendance.idles || []).map((idle) => ({
-        attendanceId: attendance._id,
-        date: attendance.date,
-        start: idle.start,
-        end: idle.end,
-        reason: idle.reason
+    const data = await Attendance.find({ employeeId: objectId });
+
+    const logs = data.flatMap(a =>
+      (a.idles || []).map(i => ({
+        date: a.date,
+        start: toIST(i.start),
+        end: i.end ? toIST(i.end) : null,
+        reason: i.reason
       }))
     );
 
-    res.json({ success: true, idleLogs });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ---------------------------
-// Live Working Hours
-// ---------------------------
-exports.getLiveHours = async (req, res) => {
-  try {
-    const userId = req.query.employeeId;
-    if (!userId) {
-      return res.status(400).json({ message: "employeeId is required" });
-    }
-
-    const objectId = new mongoose.Types.ObjectId(userId);
-    const todayString = getISTDateString(); // "YYYY-MM-DD"
-    const { start, end } = getISTDayRange(); // full day range in Date objects
-
-    // Try to find attendance for today (works for both string or Date)
-    const attendance = await Attendance.findOne({
-      employeeId: objectId,
-      $or: [
-        { date: todayString }, // if date stored as string
-        { date: { $gte: start, $lte: end } } // if date stored as Date
-      ]
-    });
-
-    if (!attendance) {
-      return res.json({ hours: 0, breakHours: 0, idleHours: 0 });
-    }
-
-    // Calculate live work hours
-    calculateWorkHours(attendance, false);
-
-    res.json({
-      hours: attendance.totalWorkHours || 0,
-      breakHours: attendance.breakHours || 0,
-      idleHours: attendance.idleHours || 0
-    });
+    res.json({ success: true, logs });
 
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
-////////
-cron.schedule("30 18 * * *", async () => {
-  try {
 
-    const today = getISTDateString();
-    const { start: holidayStart, end: holidayEnd } = getISTDayRange();
-
-    const day = new Date().toLocaleString("en-US", {
-      weekday: "long",
-      timeZone: "Asia/Kolkata"
-    });
-
-    if (day === "Saturday" || day === "Sunday") {
-      console.log("Weekend detected, skipping auto logout");
-      return;
-    }
-
-    const holiday = await Holiday.findOne({
-      date: { $gte: holidayStart, $lte: holidayEnd }
-    });
-
-    if (holiday) {
-      console.log("Today is holiday, skipping auto logout");
-      return;
-    }
-
-    const records = await Attendance.find({ date: today });
-
-    // ✅ FIXED LOOP
-    for (const r of records) {
-
-      const lastSession = r.sessions[r.sessions.length - 1];
-
-      if (lastSession && !lastSession.logoutTime) {
-        lastSession.logoutTime = new Date();
-        r.lastLogout = new Date();
-      }
-
-      await calculateWorkHours(r, true);
-
-      await r.save();
-    }
-
-    console.log("Auto logout executed at 6:30 PM IST");
-
-  } catch (err) {
-    console.log("Auto logout error:", err);
-  }
-
-}, {
-  timezone: "Asia/Kolkata"
-});
-
+// =======================
+// ATTENDANCE APIs
+// =======================
 exports.getAllAttendance = async (req, res) => {
-  try {
-
-    const records = await Attendance.find()
-      .populate("employeeId", "name email");
-
-    res.json({
-      success: true,
-      count: records.length,
-      data: records
-    });
-
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+  const data = await Attendance.find().populate("employeeId");
+  res.json({ success: true, data });
 };
 
 exports.getAttendanceById = async (req, res) => {
-  try {
-
-    const id = req.params.id;
-
-    const record = await Attendance.findById(id)
-      .populate("employeeId", "name email");
-
-    if (!record) {
-      return res.status(404).json({
-        success:false,
-        message:"Attendance not found"
-      });
-    }
-
-    res.json({
-      success:true,
-      data:record
-    });
-
-  } catch (err) {
-    res.status(500).json({message:err.message});
-  }
+  const data = await Attendance.findById(req.params.id).populate("employeeId");
+  res.json({ success: true, data });
 };
+
 exports.deleteAttendance = async (req, res) => {
-  try {
-
-    const id = req.params.id;
-
-    const deleted = await Attendance.findByIdAndDelete(id);
-
-    if (!deleted) {
-      return res.status(404).json({
-        success:false,
-        message:"Attendance not found"
-      });
-    }
-
-    res.json({
-      success:true,
-      message:"Attendance deleted"
-    });
-
-  } catch (err) {
-    res.status(500).json({message:err.message});
-  }
+  await Attendance.findByIdAndDelete(req.params.id);
+  res.json({ success: true });
 };
+
+exports.getAttendanceByEmployeeId = async (req, res) => {
+  const data = await Attendance.find({
+    employeeId: new mongoose.Types.ObjectId(req.params.employeeId),
+  }).sort({ date: -1 });
+
+  res.json({ success: true, data });
+};
+
+// =======================
+// HR UPDATE
+// =======================
 exports.hrUpdateAttendance = async (req, res) => {
   try {
-
-    console.log("HR UPDATE BODY:", req.body);
-
-    const { attendanceId, status, firstLogin, lastLogout } = req.body;
-
-    if (!attendanceId) {
-      return res.status(400).json({
-        success: false,
-        message: "attendanceId is required"
-      });
-    }
+    const { attendanceId, firstLogin, lastLogout } = req.body;
 
     const attendance = await Attendance.findById(attendanceId);
 
-    if (!attendance) {
-      return res.status(404).json({
-        success: false,
-        message: "Attendance record not found"
-      });
-    }
+    if (firstLogin)
+      attendance.firstLogin = new Date(firstLogin);
 
-    // ---------------------------
-    // Update Status (optional)
-    // ---------------------------
-    if (status !== undefined) {
-      attendance.status = status;
-    }
+    if (lastLogout)
+      attendance.lastLogout = new Date(lastLogout);
 
-    // ---------------------------
-    // Update First Login (optional)
-    // ---------------------------
-    if (firstLogin !== undefined) {
-
-      const loginTime = new Date(firstLogin);
-      attendance.firstLogin = loginTime;
-
-      if (!attendance.sessions || attendance.sessions.length === 0) {
-        attendance.sessions = [{ loginTime }];
-      } else {
-        attendance.sessions[0].loginTime = loginTime;
-      }
-    }
-
-    // ---------------------------
-    // Update Last Logout (optional)
-    // ---------------------------
-    if (lastLogout !== undefined) {
-
-      const logoutTime = new Date(lastLogout);
-      attendance.lastLogout = logoutTime;
-
-      if (!attendance.sessions || attendance.sessions.length === 0) {
-        attendance.sessions = [{
-          loginTime: attendance.firstLogin || logoutTime,
-          logoutTime
-        }];
-      } else {
-        attendance.sessions[attendance.sessions.length - 1].logoutTime = logoutTime;
-      }
-    }
-
-    // ---------------------------
-    // Recalculate Work Hours
-    // ---------------------------
-    if (attendance.firstLogin && attendance.lastLogout) {
-      const total = (attendance.lastLogout - attendance.firstLogin) / (1000 * 60 * 60);
-
-      let totalBreak = 0;
-      if (attendance.breaks && attendance.breaks.length > 0) {
-        attendance.breaks.forEach((b) => {
-          if (b.start && b.end) {
-            totalBreak += (new Date(b.end) - new Date(b.start)) / (1000 * 60 * 60);
-          }
-        });
-      }
-
-      let totalIdle = 0;
-      if (attendance.idles && attendance.idles.length > 0) {
-        attendance.idles.forEach((idle) => {
-          if (idle.start && idle.end) {
-            totalIdle += (new Date(idle.end) - new Date(idle.start)) / (1000 * 60 * 60);
-          }
-        });
-      }
-
-      attendance.totalWorkHours = parseFloat((total - totalBreak - totalIdle).toFixed(2));
-    }
+    calculateWorkHours(attendance, true);
 
     await attendance.save();
 
-    res.json({
-      success: true,
-      message: "Attendance updated by HR successfully",
-      data: attendance
-    });
+    res.json({ success: true, data: attendance });
 
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };
-// ---------------------------
-// Calculate Work Hours
-// ---------------------------
-const calculateWorkHours = (attendance, isFinal = false) => {
-  if (!attendance.sessions || attendance.sessions.length === 0) {
-    attendance.totalWorkHours = 0;
-    attendance.breakHours = 0;
-    attendance.idleHours = 0;
-    attendance.overtimeHours = 0;
-    return;
+
+// =======================
+// AUTO LOGOUT (CRON IST)
+// =======================
+cron.schedule("30 18 * * *", async () => {
+  const today = getTodayIST();
+
+  const records = await Attendance.find({ date: today });
+
+  for (const r of records) {
+    const last = r.sessions.at(-1);
+
+    if (last && !last.logoutTime) {
+      const now = getNowIST();
+      last.logoutTime = now;
+      r.lastLogout = now;
+    }
+
+    calculateWorkHours(r, true);
+    await r.save();
   }
 
-  const now = new Date();
-  let totalMs = 0;
-  attendance.sessions.forEach((session) => {
-    if (!session.loginTime) return;
-    const sessionEnd = session.logoutTime ? new Date(session.logoutTime) : now;
-    totalMs += getDurationMs(session.loginTime, sessionEnd);
+  console.log("Auto logout IST done");
+
+}, { timezone: IST });
+
+// =======================
+// CALCULATE HOURS
+// =======================
+const calculateWorkHours = (attendance, isFinal = false) => {
+  let total = 0;
+
+  attendance.sessions.forEach(s => {
+    total += getDurationMs(s.loginTime, s.logoutTime || getNowIST());
   });
 
   let breakMs = 0;
-  if (attendance.breaks && attendance.breaks.length > 0) {
-    attendance.breaks.forEach((b) => {
-      if (!b.start) return;
-      const breakEnd = b.end ? new Date(b.end) : now;
-      breakMs += getDurationMs(b.start, breakEnd);
-    });
-  }
+  attendance.breaks?.forEach(b => {
+    breakMs += getDurationMs(b.start, b.end || getNowIST());
+  });
 
   let idleMs = 0;
-  if (attendance.idles && attendance.idles.length > 0) {
-    attendance.idles.forEach((idle) => {
-      if (!idle.start) return;
-      const idleEnd = idle.end ? new Date(idle.end) : now;
-      idleMs += getDurationMs(idle.start, idleEnd);
-    });
-  }
+  attendance.idles?.forEach(i => {
+    idleMs += getDurationMs(i.start, i.end || getNowIST());
+  });
 
-  const totalHours = totalMs / (1000 * 60 * 60);
-  const breakHours = breakMs / (1000 * 60 * 60);
-  const idleHours = idleMs / (1000 * 60 * 60);
-  const workedHours = totalHours - breakHours - idleHours;
+  const worked =
+    total / 3600000 -
+    breakMs / 3600000 -
+    idleMs / 3600000;
 
-  attendance.totalWorkHours = parseFloat(Math.max(workedHours, 0).toFixed(2));
-  attendance.breakHours = parseFloat(Math.max(breakHours, 0).toFixed(2));
-  attendance.idleHours = parseFloat(Math.max(idleHours, 0).toFixed(2));
-
-  const OVERTIME_THRESHOLD = 8;
-  if (workedHours > OVERTIME_THRESHOLD) {
-    attendance.overtimeHours = parseFloat((workedHours - OVERTIME_THRESHOLD).toFixed(2));
-  } else {
-    attendance.overtimeHours = 0;
-  }
+  attendance.totalWorkHours = +worked.toFixed(2);
+  attendance.breakHours = +(breakMs / 3600000).toFixed(2);
+  attendance.idleHours = +(idleMs / 3600000).toFixed(2);
 
   if (isFinal) {
-    if (workedHours >= 7) {
-      attendance.status = "Present";
-    } else if (workedHours >= 5) {
-      attendance.status = "Half Day";
-    } else {
-      attendance.status = "Absent";
-    }
+    if (worked >= 7) attendance.status = "Present";
+    else if (worked >= 5) attendance.status = "Half Day";
+    else attendance.status = "Absent";
   }
 };
-// Get attendance by employeeId
-exports.getAttendanceByEmployeeId = async (req, res) => {
-  try {
-    const { employeeId } = req.params;
-
-    // ✅ Validate ObjectId
-    if (!mongoose.Types.ObjectId.isValid(employeeId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid employee ID format"
-      });
-    }
-
-    // ✅ Fetch all attendance records for employee
-    const records = await Attendance.find({
-      employeeId: new mongoose.Types.ObjectId(employeeId)
-    })
-      .sort({ date: -1 }) // latest first
-      .populate("employeeId", "name email department");
-
-    if (!records.length) {
-      return res.status(404).json({
-        success: false,
-        message: "No attendance records found for this employee"
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      count: records.length,
-      data: records
-    });
-
-  } catch (err) {
-    console.error("Error fetching attendance:", err.message);
-    res.status(500).json({
-      success: false,
-      message: "Server Error"
-    });
-  }
-};
-// ---------------------------
-// Get single idle by ID
-// ---------------------------
+//////
 exports.getIdleById = async (req, res) => {
   try {
     const idleId = req.params.id;
